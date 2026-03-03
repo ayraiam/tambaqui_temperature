@@ -171,7 +171,8 @@ if [[ "${MAKE_BED12}" -eq 1 ]]; then
 
   # 2) Convert genePred -> BED12 (robust: ignore models without exons)
   #    This prevents failures caused by gene-only/odd groups.
-  genePredToBed -ignoreGroupsWithoutExons "${tmp_gp}" "${BED12_OUT}"
+  genePredToBed -ignoreGroupsWithoutExons "${tmp_gp}" "${BED12_OUT}" || true
+  [[ -s "${BED12_OUT}" ]] || { echo "ERROR: BED12 conversion produced empty output: ${BED12_OUT}" >&2; exit 2; }
 
   rm -f "${tmp_gp}"
   echo ">>> BED12 written: ${BED12_OUT}"
