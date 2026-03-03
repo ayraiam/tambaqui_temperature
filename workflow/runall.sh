@@ -29,6 +29,18 @@ FASTP_CORRECTION="${FASTP_CORRECTION:-1}"
 USE_SCREEN=0
 SCREEN_NAME="libsQC_illumina"
 
+# STAR defaults
+RUN_STAR=0
+RUN_STAR_INDEX=0
+GENOME_FA=""
+GTF=""
+STAR_INDEX=""
+READ_LENGTH="151"
+RUN_COUNTS=0
+STRANDNESS="0"
+MAKE_BED12=0
+BED12_OUT=""
+
 usage() {
   cat <<EOF
 Usage: bash workflow/runall.sh [options]
@@ -54,6 +66,18 @@ screen:
   --screen              Run libsQC inside a detached screen session
   --screen-name STR     Screen session name (default: libsQC_illumina)
 
+STAR mapping:
+  --star                   Run STAR mapping on trimmed reads
+  --star-index             Build STAR genome index
+  --genome-fa PATH         Genome FASTA file
+  --gtf PATH               Annotation GTF file
+  --star-index-dir PATH    Directory for STAR genome index
+  --read-length INT        Read length (default: 151)
+  --counts                 Run featureCounts after mapping
+  --strandness 0|1|2       featureCounts strandedness (default: 0)
+  --make-bed12             Create BED12 from GTF for RSeQC
+  --bed12-out PATH         Output BED12 file path
+
 Notes:
   You can also toggle via environment variables:
     FASTP_TRIM_POLYG=0|1
@@ -78,6 +102,16 @@ while [[ $# -gt 0 ]]; do
     --rseqc-bed) RSEQC_BED="$2"; shift 2 ;;
     --rseqc-bam-dir) RSEQC_BAM_DIR="$2"; shift 2 ;;
     --skip-raw-qc) SKIP_RAW_QC=1; shift ;;
+    --star) RUN_STAR=1; shift ;;
+    --star-index) RUN_STAR_INDEX=1; shift ;;
+    --genome-fa) GENOME_FA="$2"; shift 2 ;;
+    --gtf) GTF="$2"; shift 2 ;;
+    --star-index-dir) STAR_INDEX="$2"; shift 2 ;;
+    --read-length) READ_LENGTH="$2"; shift 2 ;;
+    --counts) RUN_COUNTS=1; shift ;;
+    --strandness) STRANDNESS="$2"; shift 2 ;;
+    --make-bed12) MAKE_BED12=1; shift ;;
+    --bed12-out) BED12_OUT="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
@@ -115,12 +149,10 @@ echo ">>> Invocation logged to: ${INVOCATION_LOG}"
 
 if [[ "${RUN_LIBSQC}" -ne 1 ]]; then
   echo ">>> Skipping libsQC (--no-qc)"
-  exit 0
-fi
-
-# Command we want to run (export env vars like Slurm --export used to)
-RUN_CMD=$(
-  cat <<EOF
+else
+  # Command we want to run (export env vars like Slurm --export used to)
+  RUN_CMD=$(
+    cat <<EOF
 set -euo pipefail
 cd "$WDIR"
 export THREADS="$CPUS"
@@ -135,24 +167,56 @@ export RUN_RSEQC="$RUN_RSEQC"
 export RSEQC_BED="$RSEQC_BED"
 export RSEQC_BAM_DIR="$RSEQC_BAM_DIR"
 export SKIP_RAW_QC="$SKIP_RAW_QC"
+export RUN_STAR="$RUN_STAR"
+export RUN_STAR_INDEX="$RUN_STAR_INDEX"
+export GENOME_FA="$GENOME_FA"
+export GTF="$GTF"
+export STAR_INDEX="$STAR_INDEX"
+export READ_LENGTH="$READ_LENGTH"
+export RUN_COUNTS="$RUN_COUNTS"
+export STRANDNESS="$STRANDNESS"
+export MAKE_BED12="$MAKE_BED12"
+export BED12_OUT="$BED12_OUT"
 bash workflow/run_libsQC_illumina.sh
 EOF
-)
+  )
 
-if [[ "$USE_SCREEN" -eq 1 ]]; then
-  command -v screen >/dev/null 2>&1 || { echo "!!! screen not found in PATH"; exit 2; }
+  if [[ "$USE_SCREEN" -eq 1 ]]; then
+    command -v screen >/dev/null 2>&1 || { echo "!!! screen not found in PATH"; exit 2; }
+    screen -S "$SCREEN_NAME" -dm bash -lc "$RUN_CMD" \
+      1> >(tee -a "$OUT_LOG") \
+      2> >(tee -a "$ERR_LOG" >&2) || true
+    echo ">>> Started in screen session: ${SCREEN_NAME}"
+    echo "    Attach:  screen -r ${SCREEN_NAME}"
+    echo "    Logs  :  ${OUT_LOG} / ${ERR_LOG}"
+  else
+    echo ">>> Running libsQC in foreground..."
+    bash -lc "$RUN_CMD" 1> >(tee -a "$OUT_LOG") 2> >(tee -a "$ERR_LOG" >&2)
+    echo ">>> Done."
+    echo "    Logs  :  ${OUT_LOG} / ${ERR_LOG}"
+  fi
+fi
 
-  # Start detached screen session running the pipeline, logging stdout/stderr
-  screen -S "$SCREEN_NAME" -dm bash -lc "$RUN_CMD" \
-    1> >(tee -a "$OUT_LOG") \
-    2> >(tee -a "$ERR_LOG" >&2) || true
+# -------------------
+# STAR stage
+# -------------------
+if [[ "${RUN_STAR_INDEX}" -eq 1 || "${RUN_STAR}" -eq 1 || "${MAKE_BED12}" -eq 1 ]]; then
+  STAR_ARGS=(
+    --genome-fa "${GENOME_FA}"
+    --gtf "${GTF}"
+    --star-index-dir "${STAR_INDEX}"
+    --threads "${CPUS}"
+    --results "${RESULTS}"
+    --trim-dir "${RESULTS}/trimmed"
+    --read-length "${READ_LENGTH}"
+    --strandness "${STRANDNESS}"
+  )
 
-  echo ">>> Started in screen session: ${SCREEN_NAME}"
-  echo "    Attach:  screen -r ${SCREEN_NAME}"
-  echo "    Logs  :  ${OUT_LOG} / ${ERR_LOG}"
-else
-  echo ">>> Running libsQC in foreground..."
-  bash -lc "$RUN_CMD" 1> >(tee -a "$OUT_LOG") 2> >(tee -a "$ERR_LOG" >&2)
-  echo ">>> Done."
-  echo "    Logs  :  ${OUT_LOG} / ${ERR_LOG}"
+  [[ "${RUN_STAR_INDEX}" -eq 1 ]] && STAR_ARGS+=( --index )
+  [[ "${RUN_STAR}" -eq 1 ]] && STAR_ARGS+=( --map )
+  [[ "${RUN_COUNTS}" -eq 1 ]] && STAR_ARGS+=( --counts )
+  [[ "${MAKE_BED12}" -eq 1 ]] && STAR_ARGS+=( --make-bed12 )
+  [[ -n "${BED12_OUT}" ]] && STAR_ARGS+=( --bed12-out "${BED12_OUT}" )
+
+  bash workflow/run_star.sh "${STAR_ARGS[@]}"
 fi
