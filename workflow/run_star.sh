@@ -245,6 +245,13 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
   echo ">>> Mapping from TRIM_DIR: ${TRIM_DIR}"
   echo ">>> PE samples: ${#PE_R1[@]} | SE samples: ${#SE[@]}"
 
+  if [[ ${#PE_R1[@]} -eq 0 && ${#SE[@]} -eq 0 ]]; then
+    echo "ERROR: No trimmed FASTQs found in TRIM_DIR=${TRIM_DIR}" >&2
+    echo "Expected files like *_R1.trimmed.fastq.gz" >&2
+    ls -lh "${TRIM_DIR}" >&2 || true
+    exit 2
+  fi
+
   STAR_COMMON=(
     --runThreadN "${THREADS}"
     --genomeDir "${STAR_INDEX}"
