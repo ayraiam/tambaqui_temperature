@@ -201,16 +201,16 @@ fi
 # STAR stage
 # -------------------
 if [[ "${RUN_STAR_INDEX}" -eq 1 || "${RUN_STAR}" -eq 1 || "${MAKE_BED12}" -eq 1 ]]; then
-  STAR_ARGS=(
-    --genome-fa "${GENOME_FA}"
-    --gtf "${GTF}"
-    --star-index-dir "${STAR_INDEX}"
-    --threads "${CPUS}"
-    --results "${RESULTS}"
-    --trim-dir "${RESULTS}/trimmed"
-    --read-length "${READ_LENGTH}"
-    --strandness "${STRANDNESS}"
-  )
+	STAR_ARGS=(
+	  --genome-fa "${GENOME_FA}"
+	  --gtf "${GTF}"
+	  --star-index-dir "${STAR_INDEX}"
+	  --threads "${CPUS}"
+	  --results "${WDIR}/${RESULTS}"
+	  --trim-dir "${WDIR}/${RESULTS}/trimmed"
+	  --read-length "${READ_LENGTH}"
+	  --strandness "${STRANDNESS}"
+	)
 
   [[ "${RUN_STAR_INDEX}" -eq 1 ]] && STAR_ARGS+=( --index )
   [[ "${RUN_STAR}" -eq 1 ]] && STAR_ARGS+=( --map )
