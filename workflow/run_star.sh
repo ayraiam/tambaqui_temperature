@@ -265,13 +265,22 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
   run_one() {
     local sample="$1"
     shift
+
+    [[ -n "${sample}" ]] || { echo "ERROR: empty sample name passed to run_one" >&2; return 2; }
+    [[ $# -gt 0 ]] || { echo "ERROR: no STAR input arguments passed to run_one for sample=${sample}" >&2; return 2; }
+
     local outdir="${STAR_OUT}/${sample}"
     mkdir -p "${outdir}"
+
+    local bam="${outdir}/Aligned.sortedByCoord.out.bam"
+    if [[ -s "${bam}" ]]; then
+      echo ">>> Skipping ${sample}: BAM already exists"
+      return 0
+    fi
 
     echo ">>> STAR: ${sample}"
     STAR "${STAR_COMMON[@]}" --outFileNamePrefix "${outdir}/" "$@"
 
-    local bam="${outdir}/Aligned.sortedByCoord.out.bam"
     samtools index -@ "${THREADS}" "${bam}"
 
     local qc="${STAR_QC}/${sample}"
@@ -281,7 +290,7 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
     samtools idxstats "${bam}" > "${qc}/idxstats.txt"
   }
 
-  for r1 in "${PE_R1[@]:-}"; do
+  for r1 in "${PE_R1[@]}"; do
     bn="$(basename "$r1")"
     sample="${bn%_R1.trimmed.fastq.gz}"
     r2="${TRIM_DIR}/${sample}_R2.trimmed.fastq.gz"
@@ -289,7 +298,8 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
     run_one "${sample}" --readFilesIn "${r1}" "${r2}"
   done
 
-  for f in "${SE[@]:-}"; do
+  for f in "${SE[@]}"; do
+    [[ -n "${f}" ]] || continue
     bn="$(basename "$f")"
     sample="${bn%.trimmed.fastq.gz}"
     run_one "${sample}" --readFilesIn "${f}"
