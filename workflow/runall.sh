@@ -18,6 +18,7 @@ RUN_RSEQC=0
 RSEQC_BED=""
 RSEQC_BAM_DIR=""
 SKIP_RAW_QC=0
+RUN_QC_SUMMARY_ONLY=0
 
 # fastp knobs
 FASTP_QUAL="20"
@@ -54,6 +55,7 @@ General:
   --rseqc              Run RSeQC checks (requires BAMs + BED12)
   --rseqc-bed PATH     Gene model in BED12 format for RSeQC
   --rseqc-bam-dir DIR  Directory containing coordinate-sorted BAMs
+  --qc-summary-only      Build only the final QC summary table from existing seqkit TSVs
 
 Stage control:
   --no-qc               Skip libsQC
@@ -112,6 +114,7 @@ while [[ $# -gt 0 ]]; do
     --strandness) STRANDNESS="$2"; shift 2 ;;
     --make-bed12) MAKE_BED12=1; shift ;;
     --bed12-out) BED12_OUT="$2"; shift 2 ;;
+    --qc-summary-only) RUN_QC_SUMMARY_ONLY=1; shift 1 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
@@ -142,6 +145,7 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "FASTP_CORRECTION: ${FASTP_CORRECTION}"
   echo "USE_SCREEN: ${USE_SCREEN}"
   echo "SCREEN_NAME: ${SCREEN_NAME}"
+  echo "RUN_QC_SUMMARY_ONLY: ${RUN_QC_SUMMARY_ONLY}"
   echo "=========================================="
 } > "$INVOCATION_LOG"
 
@@ -177,6 +181,7 @@ export RUN_COUNTS="$RUN_COUNTS"
 export STRANDNESS="$STRANDNESS"
 export MAKE_BED12="$MAKE_BED12"
 export BED12_OUT="$BED12_OUT"
+export RUN_QC_SUMMARY_ONLY="$RUN_QC_SUMMARY_ONLY"
 bash workflow/run_libsQC_illumina.sh
 EOF
   )
