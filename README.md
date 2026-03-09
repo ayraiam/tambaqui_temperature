@@ -6,6 +6,13 @@
 <h1 align="center" style="font-weight: normal;">Tambaqui_temperature</h1>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/Pipeline-RNA--seq-blue">
+  <img src="https://img.shields.io/badge/Conda-ready-green">
+  <img src="https://img.shields.io/badge/STAR-supported-orange">
+  <img src="https://img.shields.io/badge/Reproducible-workflow-purple">
+</p>
+
+<p align="center">
   <code>data and discovery in flow</code><br/>
   <a href="mailto:ayrabioinf@gmail.com">ayrabioinf@gmail.com</a> · 
   <a href="https://www.linkedin.com/company/aryaiam">LinkedIn</a>
@@ -25,10 +32,11 @@ It provides a structured, re-entrant framework for:
   2) Adapter/quality trimming using fastp
   3) Post-trimming QC validation
   4) Read statistics reporting (SeqKit)
-  5) Genome alignment using STAR
-  6) Gene-level quantification using featureCounts
-  7) Optional RNA-seq diagnostics via RSeQC
-  8) Automatic environment creation + provenance logging
+  5) Automatic QC summary table generation
+  6) Genome alignment using STAR
+  7) Gene-level quantification using featureCounts
+  8) Optional RNA-seq diagnostics via RSeQC
+  9) Automatic environment creation + provenance logging
   
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
@@ -55,11 +63,12 @@ Designed for:
 <pre>
 STRUCTURE
 ---------
- /workflow/
+  /workflow/
    runall.sh                     - Main entrypoint (pipeline controller)
    run_libsQC_illumina.sh        - QC + trimming logic
    run_star.sh                   - STAR alignment + featureCounts
    run_rseqc.sh                  - Optional RNA-seq QC diagnostics
+   make_qc_summary_table.py      - Build consolidated QC summary table
 
  /envs/                          - Auto-exported Conda environments
  /logs/                          - Timestamped stdout/stderr logs
@@ -78,6 +87,9 @@ STRUCTURE
    qc_trimmed/
    multiqc_trimmed/
    summary/
+    seqkit_stats_raw.tsv
+    seqkit_stats_trimmed.tsv
+    qc_summary_table.tsv         - Consolidated QC report
    star/                         - STAR BAM outputs
    star_qc/                      - Mapping QC (samtools stats)
    counts/                       - featureCounts gene matrix
@@ -98,6 +110,7 @@ DESIGN PRINCIPLES
  - Raw reads never modified
  - Deterministic trimming (fastp)
  - Clear separation between raw QC and trimmed QC
+ - Automatic QC summary table generation
  - Automatic PE/SE detection
  - Transparent logging (timestamped invocation logs)
  - Screen-compatible execution
@@ -142,7 +155,22 @@ Stage 4 — Read statistics
     results/summary/seqkit_stats_raw.tsv
     results/summary/seqkit_stats_trimmed.tsv
 
-Stage 5 — Genome Alignment (STAR)
+Stage 5 — QC summary table
+  A consolidated QC report is generated automatically by comparing
+  raw and trimmed read statistics.
+    results/summary/qc_summary_table.tsv
+  The table contains per-sample metrics including:
+    raw read counts
+    trimmed read counts
+    reads removed
+    percent reads removed
+    raw vs trimmed total bases
+    percent bases removed
+    average read length change
+    Q20/Q30 improvement
+    GC content change
+
+Stage 6 — Genome Alignment (STAR)
   STAR alignment of trimmed reads.
 
 Outputs:
@@ -155,13 +183,13 @@ Alignment QC:
     stats.txt
     idxstats.txt
 
-Stage 6 — Gene Quantification
+Stage 7 — Gene Quantification
   featureCounts gene-level quantification.
 
 Output:
   results/counts/featureCounts.tsv
 
-Stage 7 — Optional RNA-seq QC (RSeQC)
+Stage 8 — Optional RNA-seq QC (RSeQC)
   infer_experiment.py
   geneBody_coverage.py
 
@@ -200,6 +228,7 @@ General:
   --results DIR
   --screen
   --screen-name STR
+  --qc-summary-only      
 
 QC Control:
   --no-qc
@@ -280,6 +309,9 @@ bash workflow/runall.sh \
   --genome-fa reference/genome.fa \
   --gtf reference/annotation.gtf \
   --star-index-dir reference/star_index
+
+# 11) Build QC summary table only
+bash workflow/runall.sh --qc-summary-only
 </pre>
 
 ---
