@@ -316,13 +316,14 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
     shopt -u nullglob
     [[ ${#BAMS[@]} -gt 0 ]] || { echo "ERROR: no BAMs found for featureCounts" >&2; exit 2; }
 
-    echo ">>> featureCounts (gene-level): -s ${STRANDNESS}"
+		echo ">>> featureCounts (gene-level): -s ${STRANDNESS} -p --countReadPairs"
     featureCounts \
       -T "${THREADS}" \
       -a "${GTF}" \
       -o "${COUNTS_DIR}/featureCounts.tsv" \
       -g gene_id -t exon \
       -s "${STRANDNESS}" \
+      -p --countReadPairs \
       "${BAMS[@]}" \
       1>"${COUNTS_DIR}/featureCounts.stdout.log" \
       2>"${COUNTS_DIR}/featureCounts.stderr.log"
