@@ -290,20 +290,24 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
     samtools idxstats "${bam}" > "${qc}/idxstats.txt"
   }
 
-  for r1 in "${PE_R1[@]}"; do
-    bn="$(basename "$r1")"
-    sample="${bn%_R1.trimmed.fastq.gz}"
-    r2="${TRIM_DIR}/${sample}_R2.trimmed.fastq.gz"
-    [[ -f "${r2}" ]] || { echo "ERROR: missing R2 for ${sample}: ${r2}" >&2; exit 2; }
-    run_one "${sample}" --readFilesIn "${r1}" "${r2}"
-  done
+  if (( ${#PE_R1[@]} > 0 )); then
+    for r1 in "${PE_R1[@]}"; do
+      bn="$(basename "$r1")"
+      sample="${bn%_R1.trimmed.fastq.gz}"
+      r2="${TRIM_DIR}/${sample}_R2.trimmed.fastq.gz}"
+      [[ -f "${r2}" ]] || { echo "ERROR: missing R2 for ${sample}: ${r2}" >&2; exit 2; }
+      run_one "${sample}" --readFilesIn "${r1}" "${r2}"
+    done
+  fi
 
-  for f in "${SE[@]}"; do
-    [[ -n "${f}" ]] || continue
-    bn="$(basename "$f")"
-    sample="${bn%.trimmed.fastq.gz}"
-    run_one "${sample}" --readFilesIn "${f}"
-  done
+  if (( ${#SE[@]} > 0 )); then
+    for f in "${SE[@]}"; do
+      [[ -n "${f}" ]] || continue
+      bn="$(basename "$f")"
+      sample="${bn%.trimmed.fastq.gz}"
+      run_one "${sample}" --readFilesIn "${f}"
+    done
+  fi
 
   # featureCounts ON by default (unless --no-counts)
   if [[ "${RUN_COUNTS}" -eq 1 ]]; then
