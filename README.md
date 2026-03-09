@@ -16,8 +16,8 @@
 <pre>
 ABOUT
 -----
-libsQC_illumina is a lightweight, reproducible, Conda-native QC and trimming
-pipeline for Illumina short-read sequencing data (RNA-seq or DNA-seq).
+libsQC_illumina is a lightweight, reproducible, Conda-native pipeline for
+Illumina short-read sequencing analysis (RNA-seq or DNA-seq).
 
 It provides a structured, re-entrant framework for:
 
@@ -25,9 +25,11 @@ It provides a structured, re-entrant framework for:
   2) Adapter/quality trimming using fastp
   3) Post-trimming QC validation
   4) Read statistics reporting (SeqKit)
-  5) Optional RNA-seq diagnostics via RSeQC
-  6) Automatic environment creation + provenance logging
-
+  5) Genome alignment using STAR
+  6) Gene-level quantification using featureCounts
+  7) Optional RNA-seq diagnostics via RSeQC
+  8) Automatic environment creation + provenance logging
+  
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
   • Single-end reads
@@ -54,15 +56,20 @@ Designed for:
 STRUCTURE
 ---------
  /workflow/
-   runall.sh                     - Main entrypoint (foreground or screen)
-   run_libsQC_illumina.sh        - Core QC + trimming logic
+   runall.sh                     - Main entrypoint (pipeline controller)
+   run_libsQC_illumina.sh        - QC + trimming logic
+   run_star.sh                   - STAR alignment + featureCounts
    run_rseqc.sh                  - Optional RNA-seq QC diagnostics
 
- /envs/                          - Auto-exported Conda environment
+ /envs/                          - Auto-exported Conda environments
  /logs/                          - Timestamped stdout/stderr logs
  /metadata/
    fastq_meta.tsv                - Auto-generated FASTQ manifest
  /data/                          - Input FASTQ(.gz) files
+ /reference/
+   genome.fa                     - Reference genome
+   annotation.gtf                - Gene annotation
+   star_index/                   - STAR genome index
  /results/
    qc_raw/
    multiqc_raw/
@@ -71,6 +78,9 @@ STRUCTURE
    qc_trimmed/
    multiqc_trimmed/
    summary/
+   star/                         - STAR BAM outputs
+   star_qc/                      - Mapping QC (samtools stats)
+   counts/                       - featureCounts gene matrix
    rseqc/                        - Optional RNA-seq QC outputs
 
  README.md
@@ -95,6 +105,11 @@ DESIGN PRINCIPLES
  - Fail-fast behavior (set -euo pipefail)
  - Explicit environment variable control
  - Re-entrant safe execution
+ - STAR alignment integrated after trimming
+ - Automatic paired-end detection for mapping
+ - Alignment QC via samtools
+ - Gene quantification via featureCounts
+ - Safe re-entry (existing BAMs skipped)
 </pre>
 
 ---
@@ -113,9 +128,10 @@ Stage 2 — Trimming (fastp)
   • Length filtering
   • Optional polyG trimming (NovaSeq/NextSeq)
   • Optional overlap correction (PE)
-  Outputs:
-    results/trimmed/
-    results/fastp/
+
+Outputs:
+  results/trimmed/
+  results/fastp/
 
 Stage 3 — Trimmed QC
   fastqc → results/qc_trimmed/
@@ -126,11 +142,31 @@ Stage 4 — Read statistics
     results/summary/seqkit_stats_raw.tsv
     results/summary/seqkit_stats_trimmed.tsv
 
-Stage 5 — Optional RNA-seq QC (RSeQC)
+Stage 5 — Genome Alignment (STAR)
+  STAR alignment of trimmed reads.
+
+Outputs:
+  results/star/<sample>/Aligned.sortedByCoord.out.bam
+  results/star/<sample>/Log.final.out
+
+Alignment QC:
+  results/star_qc/<sample>/
+    flagstat.txt
+    stats.txt
+    idxstats.txt
+
+Stage 6 — Gene Quantification
+  featureCounts gene-level quantification.
+
+Output:
+  results/counts/featureCounts.tsv
+
+Stage 7 — Optional RNA-seq QC (RSeQC)
   infer_experiment.py
   geneBody_coverage.py
-  Output:
-    results/rseqc/<sample>/
+
+Output:
+  results/rseqc/<sample>/
 </pre>
 
 ---
@@ -174,6 +210,19 @@ RSeQC:
   --rseqc
   --rseqc-bed PATH
   --rseqc-bam-dir DIR
+
+STAR Mapping:
+  --star                   Run STAR mapping
+  --star-index             Build STAR genome index
+  --genome-fa PATH         Genome FASTA
+  --gtf PATH               Gene annotation
+  --star-index-dir PATH    STAR genome index directory
+  --read-length INT        Read length (default: 151)
+
+Quantification:
+  --counts                 Run featureCounts
+  --strandness 0|1|2       featureCounts strandedness
+  
 </pre>
 
 ---
@@ -208,6 +257,29 @@ bash workflow/runall.sh \
 
 # 7) Custom FASTQ directory
 bash workflow/runall.sh --fastq-dir data_batch2 --results results_batch2
+
+# 8) Build STAR genome index
+bash workflow/runall.sh \
+  --star-index \
+  --genome-fa reference/genome.fa \
+  --gtf reference/annotation.gtf \
+  --star-index-dir reference/star_index
+
+# 9) Run STAR alignment
+bash workflow/runall.sh \
+  --star \
+  --genome-fa reference/genome.fa \
+  --gtf reference/annotation.gtf \
+  --star-index-dir reference/star_index
+
+# 10) Run STAR + gene counting
+bash workflow/runall.sh \
+  --star \
+  --counts \
+  --strandness 0 \
+  --genome-fa reference/genome.fa \
+  --gtf reference/annotation.gtf \
+  --star-index-dir reference/star_index
 </pre>
 
 ---
@@ -242,6 +314,9 @@ Tested with:
   • Illumina Stranded Total RNA Prep (Ribo-Zero Plus)
   • Paired-end and single-end layouts
   • Mixed FASTQ directories
+  • STAR ≥ 2.7
+  • featureCounts (Subread)
+  • samtools QC metrics
 </pre>
 
 ---
