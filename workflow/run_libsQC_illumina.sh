@@ -12,6 +12,9 @@
 #   results/qc_trimmed/
 #   results/multiqc_trimmed/
 #   results/summary/
+#     - seqkit_stats_raw.tsv
+#     - seqkit_stats_trimmed.tsv
+#     - qc_summary_table.tsv
 #   metadata/fastq_meta.tsv
 #   envs/libsQC_illumina.yml
 # ==========================================================
@@ -31,6 +34,8 @@ FASTP_TRIM_POLYG="${FASTP_TRIM_POLYG:-1}"  # NextSeq/NovaSeq polyG tail
 FASTP_CORRECTION="${FASTP_CORRECTION:-1}"  # overlap correction for PE
 
 RAW_QC_ONLY="${RAW_QC_ONLY:-0}"
+
+RUN_QC_SUMMARY_ONLY="${RUN_QC_SUMMARY_ONLY:-0}"
 
 # -----------------------------------------
 # Conda bootstrap (robust)
@@ -90,10 +95,11 @@ create_env_libsQC_illumina() {
   local SOLVER="mamba"
   command -v mamba >/dev/null 2>&1 || SOLVER="conda"
 
-  echo ">>> Creating env ${ENV} with: fastqc multiqc fastp seqkit pigz samtools"
+  echo ">>> Creating env ${ENV} with: fastqc multiqc fastp seqkit pigz samtools pandas"
   set +e
   ${SOLVER} create -n "${ENV}" -y -c conda-forge -c bioconda \
     python=3.11 \
+    pandas \
     fastqc=0.12.1 \
     multiqc=1.21 \
     fastp \
@@ -111,6 +117,7 @@ create_env_libsQC_illumina() {
     conda config --set channel_priority flexible
     ${SOLVER} create -n "${ENV}" -y -c conda-forge -c bioconda \
       python=3.11 \
+      pandas \
       fastqc=0.12.1 \
       multiqc=1.21 \
       fastp \
@@ -302,11 +309,38 @@ seqkit_stats() {
   fi
 }
 
+make_qc_summary_table() {
+  mkdir -p "${RESULTS}/summary"
+
+  local raw_tsv="${RESULTS}/summary/seqkit_stats_raw.tsv"
+  local trim_tsv="${RESULTS}/summary/seqkit_stats_trimmed.tsv"
+  local out_tsv="${RESULTS}/summary/qc_summary_table.tsv"
+
+  [[ -f "${raw_tsv}" ]] || { echo "!!! Missing raw seqkit stats: ${raw_tsv}"; exit 1; }
+  [[ -f "${trim_tsv}" ]] || { echo "!!! Missing trimmed seqkit stats: ${trim_tsv}"; exit 1; }
+
+  echo ">>> Building per-sample QC summary table..."
+  python workflow/make_qc_summary_table.py \
+    --raw "${raw_tsv}" \
+    --trimmed "${trim_tsv}" \
+    --out "${out_tsv}"
+
+  echo ">>> QC summary table -> ${out_tsv}"
+}
+
 # -------------------
 # Main
 # -------------------
 create_env_libsQC_illumina
 export_env
+
+if [[ "${RUN_QC_SUMMARY_ONLY}" -eq 1 ]]; then
+  echo ">>> RUN_QC_SUMMARY_ONLY=1: building QC summary table only"
+  make_qc_summary_table
+  echo ">>> DONE."
+  echo "    QC summary table : ${RESULTS}/summary/qc_summary_table.tsv"
+  exit 0
+fi
 
 gather_fastqs
 detect_pairs
@@ -332,6 +366,7 @@ run_fastp
 run_fastqc_trimmed
 run_multiqc_trimmed
 seqkit_stats
+make_qc_summary_table
 
 echo ">>> DONE."
 echo "    Raw MultiQC     : ${RESULTS}/multiqc_raw/multiqc_report.html"
