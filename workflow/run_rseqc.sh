@@ -189,8 +189,8 @@ if [[ "${MAKE_BED12}" -eq 1 ]]; then
   mkdir -p "$(dirname "${BED_OUT}")"
   TMP_GP="${BED_OUT%.bed12}.genepred"
 
-  log "Converting GTF -> GenePred"
-  run_in_rseqc_env gtfToGenePred "${GTF}" "${TMP_GP}"
+  log "Converting GTF -> GenePred (ignoring groups without exons)"
+  run_in_rseqc_env gtfToGenePred -ignoreGroupsWithoutExons "${GTF}" "${TMP_GP}"
 
   log "Converting GenePred -> BED12"
   run_in_rseqc_env genePredToBed "${TMP_GP}" "${BED_OUT}"
