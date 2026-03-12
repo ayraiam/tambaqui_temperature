@@ -12,6 +12,7 @@
   <img src="https://img.shields.io/badge/Reproducible-workflow-purple">
   <img src="https://img.shields.io/badge/RSeQC-supported-yellow">
   <img src="https://img.shields.io/badge/featureCounts-ready-red">
+  <img src="https://img.shields.io/badge/Subread-featureCounts-red">
 </p>
 
 <p align="center">
@@ -38,10 +39,11 @@ It provides a structured, re-entrant framework for:
   6) Genome alignment using STAR
   7) Gene-level quantification using featureCounts
   8) Optional RNA-seq diagnostics via RSeQC
-  9) Automatic strandedness detection support
-  10) Automatic GTF → BED12 conversion for RSeQC
-  11) Automatic dependency detection + installation inside Conda environments
-  12) Full provenance logging
+  9) RNA-seq library strandedness inference via RSeQC
+  10) Gene body coverage diagnostics
+  11) Automatic GTF → BED12 conversion for RSeQC compatibility
+  12) Automatic dependency detection + installation inside Conda environments
+  13) Full provenance logging  
   
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
@@ -194,6 +196,29 @@ Stage 7 — Gene Quantification
 Output:
   results/counts/featureCounts.tsv
 
+featureCounts settings
+
+The pipeline uses fragment-level counting for paired-end RNA-seq libraries.
+
+Default configuration:
+
+  -t exon
+  -g gene_id
+  -p --countReadPairs
+  -s <user specified>
+
+Where:
+
+  -t exon           counts exon features
+  -g gene_id        summarizes reads at gene level
+  -p                enables paired-end mode
+  --countReadPairs  counts fragments instead of individual mates
+  -s                library strandedness (determined via RSeQC)
+
+Example for reverse-stranded libraries:
+
+  -s 2 -p --countReadPairs -t exon -g gene_id
+
 Stage 8 — RNA-seq Diagnostics (RSeQC)
 
 Optional post-alignment diagnostics including:
@@ -269,6 +294,7 @@ RSeQC diagnostics:
   --rseqc-make-bed12      Convert GTF → BED12 automatically
   --rseqc-bed-out PATH    Output BED12 path
   --rseqc-full            Run full diagnostics (infer_experiment + geneBody_coverage)
+  --gene-body-coverage   Run gene body coverage only
 
 Default behavior runs only strandedness inference.
   
@@ -281,8 +307,13 @@ STAR Mapping:
   --read-length INT        Read length (default: 151)
 
 Quantification:
-  --counts                 Run featureCounts
+  --featurecounts          Run featureCounts using existing STAR BAMs
   --strandness 0|1|2       featureCounts strandedness
+
+Recommended workflow:
+  1) Run alignment (--star)
+  2) Infer strandedness via RSeQC
+  3) Run featureCounts with the correct -s value
   
 </pre>
 
@@ -333,19 +364,25 @@ bash workflow/runall.sh \
   --gtf reference/annotation.gtf \
   --star-index-dir reference/star_index
 
-# 10) Run STAR + gene counting
+# 10) Run STAR alignment
 bash workflow/runall.sh \
   --star \
-  --counts \
-  --strandness 0 \
   --genome-fa reference/genome.fa \
   --gtf reference/annotation.gtf \
   --star-index-dir reference/star_index
 
-# 11) Build QC summary table only
+# 11) Run gene counting from existing BAM files
+bash workflow/runall.sh \
+  --featurecounts \
+  --strandness 2 \
+  --genome-fa reference/genome.fa \
+  --gtf reference/annotation.gtf \
+  --star-index-dir reference/star_index
+  
+# 12) Build QC summary table only
 bash workflow/runall.sh --qc-summary-only
 
-# 12) Determine RNA-seq library strandedness
+# 13) Determine RNA-seq library strandedness
 # (recommended before running featureCounts)
 
 bash workflow/runall.sh \
@@ -366,7 +403,17 @@ to determine the correct featureCounts strandedness mode.
 <pre>
 DEPENDENCIES
 ------------
-Required tools are automatically verified by the pipeline.
+The pipeline automatically creates a dedicated Conda environment
+for STAR alignment, featureCounts quantification, and RSeQC diagnostics.
+
+Installed tools include:
+
+  STAR
+  subread (featureCounts)
+  samtools
+  rseqc
+  ucsc-gtftogenepred
+  ucsc-genepredtobed
 
 If missing, the following packages will be installed automatically
 into the active Conda environment:
