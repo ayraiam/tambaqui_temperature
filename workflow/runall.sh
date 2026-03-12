@@ -22,6 +22,7 @@ RSEQC_BAM_DIR=""
 RSEQC_MAKE_BED12=0
 RSEQC_BED_OUT=""
 RSEQC_INFER_ONLY=1
+RSEQC_GENE_BODY_ONLY=0
 RSEQC_ENV_NAME="rseqc_env"
 RSEQC_ENV_FILE="envs/rseqc_env.yml"
 SKIP_RAW_QC=0
@@ -40,11 +41,11 @@ SCREEN_NAME="libsQC_illumina"
 # STAR defaults
 RUN_STAR=0
 RUN_STAR_INDEX=0
+RUN_FEATURECOUNTS=0
 GENOME_FA=""
 GTF=""
 STAR_INDEX=""
 READ_LENGTH="151"
-RUN_COUNTS=0
 STRANDNESS="0"
 MAKE_BED12=0
 BED12_OUT=""
@@ -54,11 +55,12 @@ usage() {
 Usage: bash workflow/runall.sh [options]
 
 General:
-  --cpus INT            Threads to use (default: 8)
-  --wd PATH             Working directory (default: current)
-  --fastq-dir PATH      Input FASTQ dir (default: data)
-  --results DIR         Output root (default: results)
-  --raw-qc-only         Run only FastQC+MultiQC on raw reads (skip fastp + trimmed QC + seqkit)
+  --cpus INT              Threads to use (default: 8)
+  --wd PATH               Working directory (default: current)
+  --fastq-dir PATH        Input FASTQ dir (default: data)
+  --results DIR           Output root (default: results)
+  --raw-qc-only           Run only FastQC+MultiQC on raw reads
+  --qc-summary-only       Build only the final QC summary table
   --rseqc                 Run RSeQC as a separate stage
   --rseqc-bam PATH        Single coordinate-sorted BAM
   --rseqc-bam-dir DIR     Directory containing coordinate-sorted BAMs
@@ -67,32 +69,32 @@ General:
   --rseqc-make-bed12      Convert GTF -> BED12 for RSeQC
   --rseqc-bed-out PATH    Output BED12 path
   --rseqc-full            Run infer_experiment.py + geneBody_coverage.py
+  --gene-body-coverage    Run only geneBody_coverage.py
   --rseqc-env-name STR    Conda env name for RSeQC tools (default: rseqc_env)
   --rseqc-env-file PATH   Conda YAML file for RSeQC env
-  --qc-summary-only      Build only the final QC summary table from existing seqkit TSVs
 
 Stage control:
-  --no-qc               Skip libsQC
+  --no-qc                 Skip libsQC
 
 fastp:
-  --fastp-qual INT      phred cutoff (default: 20)
-  --fastp-len-min INT   min length after trimming (default: 30)
+  --fastp-qual INT        phred cutoff (default: 20)
+  --fastp-len-min INT     min length after trimming (default: 30)
 
 screen:
-  --screen              Run libsQC inside a detached screen session
-  --screen-name STR     Screen session name (default: libsQC_illumina)
+  --screen                Run libsQC inside detached screen session
+  --screen-name STR       Screen session name (default: libsQC_illumina)
 
-STAR mapping:
-  --star                   Run STAR mapping on trimmed reads
-  --star-index             Build STAR genome index
-  --genome-fa PATH         Genome FASTA file
-  --gtf PATH               Annotation GTF file
-  --star-index-dir PATH    Directory for STAR genome index
-  --read-length INT        Read length (default: 151)
-  --counts                 Run featureCounts after mapping
-  --strandness 0|1|2       featureCounts strandedness (default: 0)
-  --make-bed12             Create BED12 from GTF for RSeQC
-  --bed12-out PATH         Output BED12 file path
+STAR mapping / counting:
+  --star                  Run STAR mapping on trimmed reads
+  --star-index            Build STAR genome index
+  --featurecounts         Run featureCounts on existing STAR BAMs
+  --genome-fa PATH        Genome FASTA file
+  --gtf PATH              Annotation GTF file
+  --star-index-dir PATH   Directory for STAR genome index
+  --read-length INT       Read length (default: 151)
+  --strandness 0|1|2      featureCounts strandedness (default: 0)
+  --make-bed12            Create BED12 from GTF for RSeQC
+  --bed12-out PATH        Output BED12 file path
 
 Notes:
   You can also toggle via environment variables:
@@ -121,17 +123,18 @@ while [[ $# -gt 0 ]]; do
     --rseqc-gtf) RSEQC_GTF="$2"; shift 2 ;;
     --rseqc-make-bed12) RSEQC_MAKE_BED12=1; shift 1 ;;
     --rseqc-bed-out) RSEQC_BED_OUT="$2"; shift 2 ;;
-    --rseqc-full) RSEQC_INFER_ONLY=0; shift 1 ;;
+    --rseqc-full) RSEQC_INFER_ONLY=0; RSEQC_GENE_BODY_ONLY=0; shift 1 ;;
+    --gene-body-coverage) RUN_RSEQC=1; RSEQC_INFER_ONLY=0; RSEQC_GENE_BODY_ONLY=1; shift 1 ;;
     --rseqc-env-name) RSEQC_ENV_NAME="$2"; shift 2 ;;
     --rseqc-env-file) RSEQC_ENV_FILE="$2"; shift 2 ;;
     --skip-raw-qc) SKIP_RAW_QC=1; shift ;;
     --star) RUN_STAR=1; shift ;;
     --star-index) RUN_STAR_INDEX=1; shift ;;
+    --featurecounts) RUN_FEATURECOUNTS=1; shift ;;
     --genome-fa) GENOME_FA="$2"; shift 2 ;;
     --gtf) GTF="$2"; shift 2 ;;
     --star-index-dir) STAR_INDEX="$2"; shift 2 ;;
     --read-length) READ_LENGTH="$2"; shift 2 ;;
-    --counts) RUN_COUNTS=1; shift ;;
     --strandness) STRANDNESS="$2"; shift 2 ;;
     --make-bed12) MAKE_BED12=1; shift ;;
     --bed12-out) BED12_OUT="$2"; shift 2 ;;
@@ -148,7 +151,6 @@ OUT_LOG="logs/libsQC_${TS}.out"
 ERR_LOG="logs/libsQC_${TS}.err"
 INVOCATION_LOG="logs/invocation_${TS}.txt"
 
-# Log invocation
 {
   echo "=========================================="
   echo "Timestamp : $(date)"
@@ -167,6 +169,13 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "USE_SCREEN: ${USE_SCREEN}"
   echo "SCREEN_NAME: ${SCREEN_NAME}"
   echo "RUN_QC_SUMMARY_ONLY: ${RUN_QC_SUMMARY_ONLY}"
+  echo "RUN_STAR: ${RUN_STAR}"
+  echo "RUN_STAR_INDEX: ${RUN_STAR_INDEX}"
+  echo "RUN_FEATURECOUNTS: ${RUN_FEATURECOUNTS}"
+  echo "RUN_RSEQC: ${RUN_RSEQC}"
+  echo "RSEQC_INFER_ONLY: ${RSEQC_INFER_ONLY}"
+  echo "RSEQC_GENE_BODY_ONLY: ${RSEQC_GENE_BODY_ONLY}"
+  echo "STRANDNESS: ${STRANDNESS}"
   echo "=========================================="
 } > "$INVOCATION_LOG"
 
@@ -175,7 +184,6 @@ echo ">>> Invocation logged to: ${INVOCATION_LOG}"
 if [[ "${RUN_LIBSQC}" -ne 1 ]]; then
   echo ">>> Skipping libsQC (--no-qc)"
 else
-  # Command we want to run (export env vars like Slurm --export used to)
   RUN_CMD=$(
     cat <<EOF
 set -euo pipefail
@@ -191,11 +199,11 @@ export RAW_QC_ONLY="$RAW_QC_ONLY"
 export SKIP_RAW_QC="$SKIP_RAW_QC"
 export RUN_STAR="$RUN_STAR"
 export RUN_STAR_INDEX="$RUN_STAR_INDEX"
+export RUN_FEATURECOUNTS="$RUN_FEATURECOUNTS"
 export GENOME_FA="$GENOME_FA"
 export GTF="$GTF"
 export STAR_INDEX="$STAR_INDEX"
 export READ_LENGTH="$READ_LENGTH"
-export RUN_COUNTS="$RUN_COUNTS"
 export STRANDNESS="$STRANDNESS"
 export MAKE_BED12="$MAKE_BED12"
 export BED12_OUT="$BED12_OUT"
@@ -221,23 +229,23 @@ EOF
 fi
 
 # -------------------
-# STAR stage
+# STAR / featureCounts stage
 # -------------------
-if [[ "${RUN_STAR_INDEX}" -eq 1 || "${RUN_STAR}" -eq 1 || "${MAKE_BED12}" -eq 1 ]]; then
-	STAR_ARGS=(
-	  --genome-fa "${GENOME_FA}"
-	  --gtf "${GTF}"
-	  --star-index-dir "${STAR_INDEX}"
-	  --threads "${CPUS}"
-	  --results "${WDIR}/${RESULTS}"
-	  --trim-dir "${WDIR}/${RESULTS}/trimmed"
-	  --read-length "${READ_LENGTH}"
-	  --strandness "${STRANDNESS}"
-	)
+if [[ "${RUN_STAR_INDEX}" -eq 1 || "${RUN_STAR}" -eq 1 || "${RUN_FEATURECOUNTS}" -eq 1 || "${MAKE_BED12}" -eq 1 ]]; then
+  STAR_ARGS=(
+    --genome-fa "${GENOME_FA}"
+    --gtf "${GTF}"
+    --star-index-dir "${STAR_INDEX}"
+    --threads "${CPUS}"
+    --results "${WDIR}/${RESULTS}"
+    --trim-dir "${WDIR}/${RESULTS}/trimmed"
+    --read-length "${READ_LENGTH}"
+    --strandness "${STRANDNESS}"
+  )
 
   [[ "${RUN_STAR_INDEX}" -eq 1 ]] && STAR_ARGS+=( --index )
   [[ "${RUN_STAR}" -eq 1 ]] && STAR_ARGS+=( --map )
-  [[ "${RUN_COUNTS}" -eq 1 ]] && STAR_ARGS+=( --counts )
+  [[ "${RUN_FEATURECOUNTS}" -eq 1 ]] && STAR_ARGS+=( --counts )
   [[ "${MAKE_BED12}" -eq 1 ]] && STAR_ARGS+=( --make-bed12 )
   [[ -n "${BED12_OUT}" ]] && STAR_ARGS+=( --bed12-out "${BED12_OUT}" )
 
@@ -259,6 +267,7 @@ if [[ "${RUN_RSEQC}" -eq 1 ]]; then
   [[ "${RSEQC_MAKE_BED12}" -eq 1 ]] && RSEQC_ARGS+=( --make-bed12 )
   [[ -n "${RSEQC_BED_OUT}" ]] && RSEQC_ARGS+=( --bed-out "${RSEQC_BED_OUT}" )
   [[ "${RSEQC_INFER_ONLY}" -eq 1 ]] && RSEQC_ARGS+=( --infer-only )
+  [[ "${RSEQC_GENE_BODY_ONLY}" -eq 1 ]] && RSEQC_ARGS+=( --gene-body-only )
   [[ -n "${RSEQC_ENV_NAME}" ]] && RSEQC_ARGS+=( --env-name "${RSEQC_ENV_NAME}" )
   [[ -n "${RSEQC_ENV_FILE}" ]] && RSEQC_ARGS+=( --env-file "${RSEQC_ENV_FILE}" )
 
