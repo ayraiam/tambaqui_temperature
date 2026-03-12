@@ -10,6 +10,8 @@
   <img src="https://img.shields.io/badge/Conda-ready-green">
   <img src="https://img.shields.io/badge/STAR-supported-orange">
   <img src="https://img.shields.io/badge/Reproducible-workflow-purple">
+  <img src="https://img.shields.io/badge/RSeQC-supported-yellow">
+  <img src="https://img.shields.io/badge/featureCounts-ready-red">
 </p>
 
 <p align="center">
@@ -36,7 +38,10 @@ It provides a structured, re-entrant framework for:
   6) Genome alignment using STAR
   7) Gene-level quantification using featureCounts
   8) Optional RNA-seq diagnostics via RSeQC
-  9) Automatic environment creation + provenance logging
+  9) Automatic strandedness detection support
+  10) Automatic GTF → BED12 conversion for RSeQC
+  11) Automatic dependency detection + installation inside Conda environments
+  12) Full provenance logging
   
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
@@ -67,7 +72,7 @@ STRUCTURE
    runall.sh                     - Main entrypoint (pipeline controller)
    run_libsQC_illumina.sh        - QC + trimming logic
    run_star.sh                   - STAR alignment + featureCounts
-   run_rseqc.sh                  - Optional RNA-seq QC diagnostics
+   run_rseqc.sh                  - RSeQC diagnostics + strandedness inference
    make_qc_summary_table.py      - Build consolidated QC summary table
 
  /envs/                          - Auto-exported Conda environments
@@ -114,7 +119,7 @@ DESIGN PRINCIPLES
  - Automatic PE/SE detection
  - Transparent logging (timestamped invocation logs)
  - Screen-compatible execution
- - Optional RNA-seq strand + coverage diagnostics
+ - Optional RNA-seq strandedness inference and coverage diagnostics
  - Fail-fast behavior (set -euo pipefail)
  - Explicit environment variable control
  - Re-entrant safe execution
@@ -189,12 +194,32 @@ Stage 7 — Gene Quantification
 Output:
   results/counts/featureCounts.tsv
 
-Stage 8 — Optional RNA-seq QC (RSeQC)
-  infer_experiment.py
-  geneBody_coverage.py
+Stage 8 — RNA-seq Diagnostics (RSeQC)
 
-Output:
+Optional post-alignment diagnostics including:
+
+  • Library strandedness inference
+      infer_experiment.py
+
+  • Gene body coverage assessment
+      geneBody_coverage.py
+
+The pipeline can automatically convert GTF annotations
+to BED12 format required by RSeQC using UCSC utilities.
+
+Outputs:
   results/rseqc/<sample>/
+      infer_experiment.txt
+      infer_experiment.log
+      geneBody_coverage.*
+
+Strandedness inference is typically run before gene counting
+to determine the correct featureCounts parameter:
+
+  -s 0   unstranded
+  -s 1   forward-stranded
+  -s 2   reverse-stranded
+  
 </pre>
 
 ---
@@ -235,11 +260,18 @@ QC Control:
   --raw-qc-only
   --skip-raw-qc
 
-RSeQC:
-  --rseqc
-  --rseqc-bed PATH
-  --rseqc-bam-dir DIR
+RSeQC diagnostics:
+  --rseqc                 Run RSeQC diagnostics
+  --rseqc-bam PATH        Single coordinate-sorted BAM
+  --rseqc-bam-dir DIR     Directory containing BAM files
+  --rseqc-bed PATH        BED12 gene model
+  --rseqc-gtf PATH        GTF annotation (can auto-convert to BED12)
+  --rseqc-make-bed12      Convert GTF → BED12 automatically
+  --rseqc-bed-out PATH    Output BED12 path
+  --rseqc-full            Run full diagnostics (infer_experiment + geneBody_coverage)
 
+Default behavior runs only strandedness inference.
+  
 STAR Mapping:
   --star                   Run STAR mapping
   --star-index             Build STAR genome index
@@ -312,8 +344,41 @@ bash workflow/runall.sh \
 
 # 11) Build QC summary table only
 bash workflow/runall.sh --qc-summary-only
+
+# 12) Determine RNA-seq library strandedness
+# (recommended before running featureCounts)
+
+bash workflow/runall.sh \
+  --no-qc \
+  --rseqc \
+  --rseqc-bam-dir results/star \
+  --rseqc-gtf reference/annotation.gtf \
+  --rseqc-make-bed12 \
+  --rseqc-bed-out reference/annotation.bed12
+
+Outputs:
+  results/rseqc/<sample>/infer_experiment.txt
+
+Inspect the fractions reported by infer_experiment.py
+to determine the correct featureCounts strandedness mode.
 </pre>
 
+<pre>
+DEPENDENCIES
+------------
+Required tools are automatically verified by the pipeline.
+
+If missing, the following packages will be installed automatically
+into the active Conda environment:
+
+  rseqc
+  samtools
+  ucsc-gtftogenepred
+  ucsc-genepredtobed
+
+This ensures that RSeQC diagnostics and BED12 conversion
+work reproducibly across environments.
+</pre>
 ---
 
 <pre>
