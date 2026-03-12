@@ -14,9 +14,8 @@ SJDB_OVERHANG="${SJDB_OVERHANG:-$((READ_LENGTH-1))}"
 
 RUN_INDEX=0
 RUN_MAP=0
+RUN_COUNTS=0
 
-# featureCounts ON by default
-RUN_COUNTS="${RUN_COUNTS:-1}"
 STRANDNESS="${STRANDNESS:-0}"   # featureCounts -s: 0 unstranded, 1 stranded, 2 reverse
 
 MAKE_BED12=0
@@ -33,10 +32,9 @@ Required:
   --star-index-dir PATH
 
 Actions:
-  --index                   Build STAR index (safeguarded: skip if already present)
+  --index                   Build STAR index
   --map                     Map trimmed FASTQs with STAR
-  --counts                  Run featureCounts (default ON; use --no-counts to disable)
-  --no-counts               Disable featureCounts
+  --counts                  Run featureCounts from existing STAR BAMs
   --make-bed12              Create BED12 from GTF for RSeQC
 
 Optional:
@@ -46,7 +44,7 @@ Optional:
   --read-length INT         (default: 151)
   --sjdb-overhang INT       (default: read_length-1)
   --strandness 0|1|2        featureCounts strandedness (default: 0)
-  --bed12-out PATH          output BED12 path (default: reference/genes.bed12)
+  --bed12-out PATH          Output BED12 path (default: reference/genes.bed12)
 
 EOF
   exit 0
@@ -67,7 +65,6 @@ while [[ $# -gt 0 ]]; do
     --index) RUN_INDEX=1; shift ;;
     --map) RUN_MAP=1; shift ;;
     --counts) RUN_COUNTS=1; shift ;;
-    --no-counts) RUN_COUNTS=0; shift ;;
     --make-bed12) MAKE_BED12=1; shift ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1" >&2; usage ;;
@@ -79,14 +76,11 @@ if [[ -z "${GENOME_FA}" || -z "${GTF}" || -z "${STAR_INDEX}" ]]; then
   usage
 fi
 
-if [[ "${RUN_INDEX}" -eq 0 && "${RUN_MAP}" -eq 0 && "${MAKE_BED12}" -eq 0 ]]; then
-  echo "ERROR: choose at least one action: --index and/or --map and/or --make-bed12" >&2
+if [[ "${RUN_INDEX}" -eq 0 && "${RUN_MAP}" -eq 0 && "${RUN_COUNTS}" -eq 0 && "${MAKE_BED12}" -eq 0 ]]; then
+  echo "ERROR: choose at least one action: --index and/or --map and/or --counts and/or --make-bed12" >&2
   usage
 fi
 
-# --------------------------
-# Conda bootstrap (robust)
-# --------------------------
 find_and_source_conda() {
   if command -v conda >/dev/null 2>&1; then
     source "$(conda info --base)/etc/profile.d/conda.sh"
@@ -119,7 +113,6 @@ ensure_channels() {
 create_env_STAR_map() {
   local ENV="STAR_map"
 
-  # safeguard: activate if exists
   if conda env list | grep -qE "^${ENV}\s"; then
     echo ">>> Env ${ENV} exists. Activating..."
     conda activate "${ENV}"
@@ -130,7 +123,7 @@ create_env_STAR_map() {
   local SOLVER="mamba"
   command -v mamba >/dev/null 2>&1 || SOLVER="conda"
 
-  echo ">>> Creating env ${ENV} (STAR mapping)"
+  echo ">>> Creating env ${ENV} (STAR mapping / counts / RSeQC)"
   set +e
   ${SOLVER} create -n "${ENV}" -y -c conda-forge -c bioconda \
     python=3.11 \
@@ -156,9 +149,6 @@ create_env_STAR_map() {
 
 create_env_STAR_map
 
-# --------------------------
-# Optional: make BED12 for RSeQC
-# --------------------------
 if [[ "${MAKE_BED12}" -eq 1 ]]; then
   [[ -n "${BED12_OUT}" ]] || BED12_OUT="reference/genes.bed12"
   mkdir -p "$(dirname "${BED12_OUT}")"
@@ -166,11 +156,7 @@ if [[ "${MAKE_BED12}" -eq 1 ]]; then
   echo ">>> Building BED12 from GTF (RSeQC input)"
   tmp_gp="$(mktemp).gp"
 
-  # 1) Convert GTF -> genePred
   gtfToGenePred "${GTF}" "${tmp_gp}"
-
-  # 2) Convert genePred -> BED12 (robust: ignore models without exons)
-  #    This prevents failures caused by gene-only/odd groups.
   genePredToBed -ignoreGroupsWithoutExons "${tmp_gp}" "${BED12_OUT}" || true
   [[ -s "${BED12_OUT}" ]] || { echo "ERROR: BED12 conversion produced empty output: ${BED12_OUT}" >&2; exit 2; }
 
@@ -178,11 +164,7 @@ if [[ "${MAKE_BED12}" -eq 1 ]]; then
   echo ">>> BED12 written: ${BED12_OUT}"
 fi
 
-# --------------------------
-# STAR index safeguard
-# --------------------------
 star_index_complete() {
-  # These are the most telling files STAR generates for genomeDir
   [[ -f "${STAR_INDEX}/Genome" ]] && \
   [[ -f "${STAR_INDEX}/SA" ]] && \
   [[ -f "${STAR_INDEX}/SAindex" ]] && \
@@ -197,12 +179,6 @@ if [[ "${RUN_INDEX}" -eq 1 ]]; then
     echo ">>> STAR index already present at ${STAR_INDEX} (skipping genomeGenerate)"
   else
     echo ">>> STAR genomeGenerate"
-    echo "    GENOME_FA     : ${GENOME_FA}"
-    echo "    GTF           : ${GTF}"
-    echo "    STAR_INDEX    : ${STAR_INDEX}"
-    echo "    THREADS       : ${THREADS}"
-    echo "    SJDB_OVERHANG : ${SJDB_OVERHANG}"
-
     STAR \
       --runThreadN "${THREADS}" \
       --runMode genomeGenerate \
@@ -213,22 +189,18 @@ if [[ "${RUN_INDEX}" -eq 1 ]]; then
   fi
 fi
 
-# --------------------------
-# STAR mapping
-# --------------------------
+STAR_OUT="${RESULTS}/star"
+STAR_QC="${RESULTS}/star_qc"
+COUNTS_DIR="${RESULTS}/counts"
+mkdir -p "${STAR_OUT}" "${STAR_QC}" "${COUNTS_DIR}"
+
 if [[ "${RUN_MAP}" -eq 1 ]]; then
   if ! star_index_complete; then
     echo "ERROR: STAR index not found/complete at ${STAR_INDEX}." >&2
-    echo "       Run with --index first (or point --star-index-dir to an existing index)." >&2
     exit 2
   fi
 
   [[ -d "${TRIM_DIR}" ]] || { echo "ERROR: TRIM_DIR not found: ${TRIM_DIR}" >&2; exit 2; }
-
-  STAR_OUT="${RESULTS}/star"
-  STAR_QC="${RESULTS}/star_qc"
-  COUNTS_DIR="${RESULTS}/counts"
-  mkdir -p "${STAR_OUT}" "${STAR_QC}" "${COUNTS_DIR}"
 
   shopt -s nullglob
   PE_R1=( "${TRIM_DIR}"/*_R1.trimmed.fastq.gz )
@@ -247,8 +219,6 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
 
   if [[ ${#PE_R1[@]} -eq 0 && ${#SE[@]} -eq 0 ]]; then
     echo "ERROR: No trimmed FASTQs found in TRIM_DIR=${TRIM_DIR}" >&2
-    echo "Expected files like *_R1.trimmed.fastq.gz" >&2
-    ls -lh "${TRIM_DIR}" >&2 || true
     exit 2
   fi
 
@@ -265,9 +235,6 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
   run_one() {
     local sample="$1"
     shift
-
-    [[ -n "${sample}" ]] || { echo "ERROR: empty sample name passed to run_one" >&2; return 2; }
-    [[ $# -gt 0 ]] || { echo "ERROR: no STAR input arguments passed to run_one for sample=${sample}" >&2; return 2; }
 
     local outdir="${STAR_OUT}/${sample}"
     mkdir -p "${outdir}"
@@ -302,21 +269,39 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
 
   if (( ${#SE[@]} > 0 )); then
     for f in "${SE[@]}"; do
-      [[ -n "${f}" ]] || continue
       bn="$(basename "$f")"
       sample="${bn%.trimmed.fastq.gz}"
       run_one "${sample}" --readFilesIn "${f}"
     done
   fi
 
-  # featureCounts ON by default (unless --no-counts)
-  if [[ "${RUN_COUNTS}" -eq 1 ]]; then
-    shopt -s nullglob
-    BAMS=( "${STAR_OUT}"/*/Aligned.sortedByCoord.out.bam )
-    shopt -u nullglob
-    [[ ${#BAMS[@]} -gt 0 ]] || { echo "ERROR: no BAMs found for featureCounts" >&2; exit 2; }
+  echo ">>> Mapping finished."
+fi
 
-		echo ">>> featureCounts (gene-level): -s ${STRANDNESS} -p --countReadPairs"
+if [[ "${RUN_COUNTS}" -eq 1 ]]; then
+  shopt -s nullglob
+  BAMS=( "${STAR_OUT}"/*/Aligned.sortedByCoord.out.bam )
+  shopt -u nullglob
+  [[ ${#BAMS[@]} -gt 0 ]] || { echo "ERROR: no BAMs found for featureCounts in ${STAR_OUT}" >&2; exit 2; }
+
+  PE_COUNT=0
+  SE_COUNT=0
+  for bam in "${BAMS[@]}"; do
+    sample="$(basename "$(dirname "$bam")")"
+    if [[ -f "${TRIM_DIR}/${sample}_R1.trimmed.fastq.gz" && -f "${TRIM_DIR}/${sample}_R2.trimmed.fastq.gz" ]]; then
+      ((PE_COUNT+=1))
+    else
+      ((SE_COUNT+=1))
+    fi
+  done
+
+  if [[ "${PE_COUNT}" -gt 0 && "${SE_COUNT}" -gt 0 ]]; then
+    echo "ERROR: mixed PE and SE libraries detected. Run featureCounts separately for each type." >&2
+    exit 2
+  fi
+
+  if [[ "${PE_COUNT}" -gt 0 ]]; then
+    echo ">>> featureCounts (PE, gene-level): -s ${STRANDNESS} -p --countReadPairs"
     featureCounts \
       -T "${THREADS}" \
       -a "${GTF}" \
@@ -328,10 +313,22 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
       1>"${COUNTS_DIR}/featureCounts.stdout.log" \
       2>"${COUNTS_DIR}/featureCounts.stderr.log"
   else
-    echo ">>> featureCounts disabled (--no-counts)"
+    echo ">>> featureCounts (SE, gene-level): -s ${STRANDNESS}"
+    featureCounts \
+      -T "${THREADS}" \
+      -a "${GTF}" \
+      -o "${COUNTS_DIR}/featureCounts.tsv" \
+      -g gene_id -t exon \
+      -s "${STRANDNESS}" \
+      "${BAMS[@]}" \
+      1>"${COUNTS_DIR}/featureCounts.stdout.log" \
+      2>"${COUNTS_DIR}/featureCounts.stderr.log"
   fi
 
-  echo ">>> DONE mapping."
-  echo "    STAR BAMs : ${STAR_OUT}/<sample>/Aligned.sortedByCoord.out.bam"
-  echo "    STAR logs : ${STAR_OUT}/<sample>/Log.final.out"
+  echo ">>> featureCounts finished."
+  echo "    Output: ${COUNTS_DIR}/featureCounts.tsv"
 fi
+
+echo ">>> DONE."
+echo "    STAR BAMs : ${STAR_OUT}/<sample>/Aligned.sortedByCoord.out.bam"
+echo "    STAR logs : ${STAR_OUT}/<sample>/Log.final.out"
