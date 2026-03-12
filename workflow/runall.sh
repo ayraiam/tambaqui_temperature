@@ -22,6 +22,8 @@ RSEQC_BAM_DIR=""
 RSEQC_MAKE_BED12=0
 RSEQC_BED_OUT=""
 RSEQC_INFER_ONLY=1
+RSEQC_ENV_NAME="rseqc_env"
+RSEQC_ENV_FILE="envs/rseqc_env.yml"
 SKIP_RAW_QC=0
 RUN_QC_SUMMARY_ONLY=0
 
@@ -65,6 +67,8 @@ General:
   --rseqc-make-bed12      Convert GTF -> BED12 for RSeQC
   --rseqc-bed-out PATH    Output BED12 path
   --rseqc-full            Run infer_experiment.py + geneBody_coverage.py
+  --rseqc-env-name STR    Conda env name for RSeQC tools (default: rseqc_env)
+  --rseqc-env-file PATH   Conda YAML file for RSeQC env
   --qc-summary-only      Build only the final QC summary table from existing seqkit TSVs
 
 Stage control:
@@ -118,6 +122,8 @@ while [[ $# -gt 0 ]]; do
     --rseqc-make-bed12) RSEQC_MAKE_BED12=1; shift 1 ;;
     --rseqc-bed-out) RSEQC_BED_OUT="$2"; shift 2 ;;
     --rseqc-full) RSEQC_INFER_ONLY=0; shift 1 ;;
+    --rseqc-env-name) RSEQC_ENV_NAME="$2"; shift 2 ;;
+    --rseqc-env-file) RSEQC_ENV_FILE="$2"; shift 2 ;;
     --skip-raw-qc) SKIP_RAW_QC=1; shift ;;
     --star) RUN_STAR=1; shift ;;
     --star-index) RUN_STAR_INDEX=1; shift ;;
@@ -253,6 +259,8 @@ if [[ "${RUN_RSEQC}" -eq 1 ]]; then
   [[ "${RSEQC_MAKE_BED12}" -eq 1 ]] && RSEQC_ARGS+=( --make-bed12 )
   [[ -n "${RSEQC_BED_OUT}" ]] && RSEQC_ARGS+=( --bed-out "${RSEQC_BED_OUT}" )
   [[ "${RSEQC_INFER_ONLY}" -eq 1 ]] && RSEQC_ARGS+=( --infer-only )
+  [[ -n "${RSEQC_ENV_NAME}" ]] && RSEQC_ARGS+=( --env-name "${RSEQC_ENV_NAME}" )
+  [[ -n "${RSEQC_ENV_FILE}" ]] && RSEQC_ARGS+=( --env-file "${RSEQC_ENV_FILE}" )
 
   bash workflow/run_rseqc.sh "${RSEQC_ARGS[@]}"
 fi
