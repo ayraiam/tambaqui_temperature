@@ -21,6 +21,8 @@ STRANDNESS="${STRANDNESS:-0}"   # featureCounts -s: 0 unstranded, 1 stranded, 2 
 MAKE_BED12=0
 BED12_OUT=""
 
+LIBRARY_TYPE="PE"
+
 usage() {
   cat <<EOF
 Usage:
@@ -66,6 +68,7 @@ while [[ $# -gt 0 ]]; do
     --map) RUN_MAP=1; shift ;;
     --counts) RUN_COUNTS=1; shift ;;
     --make-bed12) MAKE_BED12=1; shift ;;
+    --library-type) LIBRARY_TYPE="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1" >&2; usage ;;
   esac
@@ -284,23 +287,9 @@ if [[ "${RUN_COUNTS}" -eq 1 ]]; then
   shopt -u nullglob
   [[ ${#BAMS[@]} -gt 0 ]] || { echo "ERROR: no BAMs found for featureCounts in ${STAR_OUT}" >&2; exit 2; }
 
-  PE_COUNT=0
-  SE_COUNT=0
-  for bam in "${BAMS[@]}"; do
-    sample="$(basename "$(dirname "$bam")")"
-    if [[ -f "${TRIM_DIR}/${sample}_R1.trimmed.fastq.gz" && -f "${TRIM_DIR}/${sample}_R2.trimmed.fastq.gz" ]]; then
-      ((PE_COUNT+=1))
-    else
-      ((SE_COUNT+=1))
-    fi
-  done
+  LIBRARY_TYPE="${LIBRARY_TYPE:-PE}"   # PE or SE
 
-  if [[ "${PE_COUNT}" -gt 0 && "${SE_COUNT}" -gt 0 ]]; then
-    echo "ERROR: mixed PE and SE libraries detected. Run featureCounts separately for each type." >&2
-    exit 2
-  fi
-
-  if [[ "${PE_COUNT}" -gt 0 ]]; then
+  if [[ "${LIBRARY_TYPE}" == "PE" ]]; then
     echo ">>> featureCounts (PE, gene-level): -s ${STRANDNESS} -p --countReadPairs"
     featureCounts \
       -T "${THREADS}" \
@@ -312,7 +301,7 @@ if [[ "${RUN_COUNTS}" -eq 1 ]]; then
       "${BAMS[@]}" \
       1>"${COUNTS_DIR}/featureCounts.stdout.log" \
       2>"${COUNTS_DIR}/featureCounts.stderr.log"
-  else
+  elif [[ "${LIBRARY_TYPE}" == "SE" ]]; then
     echo ">>> featureCounts (SE, gene-level): -s ${STRANDNESS}"
     featureCounts \
       -T "${THREADS}" \
@@ -323,6 +312,9 @@ if [[ "${RUN_COUNTS}" -eq 1 ]]; then
       "${BAMS[@]}" \
       1>"${COUNTS_DIR}/featureCounts.stdout.log" \
       2>"${COUNTS_DIR}/featureCounts.stderr.log"
+  else
+    echo "ERROR: LIBRARY_TYPE must be PE or SE" >&2
+    exit 2
   fi
 
   echo ">>> featureCounts finished."
