@@ -90,7 +90,7 @@ ensure_conda_available() {
 }
 
 conda_env_exists() {
-  conda env list | awk '{print $1}' | grep -Fxq "$1"
+  conda env list | awk 'NR>2 {print $1}' | grep -Fxq "$1"
 }
 
 write_default_rseqc_env_file() {
@@ -138,22 +138,23 @@ run_in_rseqc_env() {
 check_tools_in_rseqc_env() {
   log "Checking required tools inside env: ${RSEQC_ENV_NAME}"
 
-  run_in_rseqc_env bash -lc 'command -v infer_experiment.py >/dev/null 2>&1' \
-    || die "infer_experiment.py not found in env ${RSEQC_ENV_NAME}"
+  conda run -n "${RSEQC_ENV_NAME}" infer_experiment.py --help >/dev/null 2>&1 \
+    || die "infer_experiment.py not found or not runnable in env ${RSEQC_ENV_NAME}"
 
-  run_in_rseqc_env bash -lc 'command -v samtools >/dev/null 2>&1' \
-    || die "samtools not found in env ${RSEQC_ENV_NAME}"
+  conda run -n "${RSEQC_ENV_NAME}" samtools --version >/dev/null 2>&1 \
+    || die "samtools not found or not runnable in env ${RSEQC_ENV_NAME}"
 
   if [[ "${MAKE_BED12}" -eq 1 ]]; then
-    run_in_rseqc_env bash -lc 'command -v gtfToGenePred >/dev/null 2>&1' \
-      || die "gtfToGenePred not found in env ${RSEQC_ENV_NAME}"
-    run_in_rseqc_env bash -lc 'command -v genePredToBed >/dev/null 2>&1' \
-      || die "genePredToBed not found in env ${RSEQC_ENV_NAME}"
+    conda run -n "${RSEQC_ENV_NAME}" gtfToGenePred 2>/dev/null >/dev/null \
+      || die "gtfToGenePred not found or not runnable in env ${RSEQC_ENV_NAME}"
+
+    conda run -n "${RSEQC_ENV_NAME}" genePredToBed 2>/dev/null >/dev/null \
+      || die "genePredToBed not found or not runnable in env ${RSEQC_ENV_NAME}"
   fi
 
   if [[ "${INFER_ONLY}" -eq 0 ]]; then
-    run_in_rseqc_env bash -lc 'command -v geneBody_coverage.py >/dev/null 2>&1' \
-      || die "geneBody_coverage.py not found in env ${RSEQC_ENV_NAME}"
+    conda run -n "${RSEQC_ENV_NAME}" geneBody_coverage.py --help >/dev/null 2>&1 \
+      || die "geneBody_coverage.py not found or not runnable in env ${RSEQC_ENV_NAME}"
   fi
 }
 
