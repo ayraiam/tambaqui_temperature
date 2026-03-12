@@ -9,7 +9,7 @@ set -euo pipefail
 #   - strandedness inference with infer_experiment.py
 #   - optional geneBody_coverage.py
 #   - optional GTF -> BED12 conversion
-#   - auto-check/install of missing tools in the active conda env
+#   - dedicated Conda env creation/check for RSeQC tools
 # ==========================================================
 
 BAM=""
@@ -21,6 +21,9 @@ BED_OUT=""
 OUTROOT="results/rseqc"
 INFER_ONLY=0
 THREADS="${THREADS:-1}"
+
+RSEQC_ENV_NAME="${RSEQC_ENV_NAME:-rseqc_env}"
+RSEQC_ENV_FILE="${RSEQC_ENV_FILE:-envs/rseqc_env.yml}"
 
 usage() {
   cat <<EOF
@@ -42,6 +45,11 @@ Output:
 
 Mode:
   --infer-only          Run only infer_experiment.py
+
+Environment:
+  --env-name STR        Conda env name for RSeQC tools (default: rseqc_env)
+  --env-file PATH       Conda YAML file for RSeQC env (default: envs/rseqc_env.yml)
+
   -h, --help            Show this help
 EOF
   exit 0
@@ -57,6 +65,8 @@ while [[ $# -gt 0 ]]; do
     --bed-out) BED_OUT="$2"; shift 2 ;;
     --outroot) OUTROOT="$2"; shift 2 ;;
     --infer-only) INFER_ONLY=1; shift 1 ;;
+    --env-name) RSEQC_ENV_NAME="$2"; shift 2 ;;
+    --env-file) RSEQC_ENV_FILE="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -76,72 +86,52 @@ have_cmd() {
 }
 
 ensure_conda_available() {
-  if ! have_cmd conda; then
-    die "conda not found in PATH. Activate the intended conda environment first."
-  fi
+  have_cmd conda || die "conda not found in PATH"
 }
 
-ensure_active_conda_env() {
-  if [[ -z "${CONDA_PREFIX:-}" || -z "${CONDA_DEFAULT_ENV:-}" ]]; then
-    die "No active conda environment detected. Activate the target env first."
-  fi
+conda_env_exists() {
+  conda env list | awk '{print $1}' | grep -Fxq "$1"
 }
 
-install_missing_tools() {
-  local need_rseqc=0
-  local need_samtools=0
-  local need_ucsc=0
+create_rseqc_env_if_needed() {
+  ensure_conda_available
 
-  if ! have_cmd infer_experiment.py; then
-    need_rseqc=1
-  fi
-
-  if [[ "${INFER_ONLY}" -eq 0 ]] && ! have_cmd geneBody_coverage.py; then
-    need_rseqc=1
-  fi
-
-  if ! have_cmd samtools; then
-    need_samtools=1
-  fi
-
-  if [[ "${MAKE_BED12}" -eq 1 ]]; then
-    if ! have_cmd gtfToGenePred || ! have_cmd genePredToBed; then
-      need_ucsc=1
-    fi
-  fi
-
-  if [[ "${need_rseqc}" -eq 0 && "${need_samtools}" -eq 0 && "${need_ucsc}" -eq 0 ]]; then
-    log "All required tools already exist in the active environment: ${CONDA_DEFAULT_ENV}"
+  if conda_env_exists "${RSEQC_ENV_NAME}"; then
+    log "RSeQC env already exists: ${RSEQC_ENV_NAME}"
     return 0
   fi
 
-  ensure_conda_available
-  ensure_active_conda_env
+  [[ -f "${RSEQC_ENV_FILE}" ]] || die "RSeQC env YAML not found: ${RSEQC_ENV_FILE}"
 
-  local -a pkgs=()
-  [[ "${need_rseqc}" -eq 1 ]] && pkgs+=(rseqc)
-  [[ "${need_samtools}" -eq 1 ]] && pkgs+=(samtools)
-  if [[ "${need_ucsc}" -eq 1 ]]; then
-    pkgs+=(ucsc-gtftogenepred ucsc-genepredtobed)
-  fi
+  log "Creating dedicated RSeQC env: ${RSEQC_ENV_NAME}"
+  log "Using env file: ${RSEQC_ENV_FILE}"
+  conda env create -f "${RSEQC_ENV_FILE}"
+}
 
-  log "Missing tools detected in env: ${CONDA_DEFAULT_ENV}"
-  log "Installing required package(s): ${pkgs[*]}"
+run_in_rseqc_env() {
+  conda run -n "${RSEQC_ENV_NAME}" "$@"
+}
 
-  conda install -y -c conda-forge -c bioconda "${pkgs[@]}"
+check_tools_in_rseqc_env() {
+  log "Checking required tools inside env: ${RSEQC_ENV_NAME}"
 
-  # Re-check after install
-  have_cmd infer_experiment.py || die "infer_experiment.py still not found after installation"
-  if [[ "${INFER_ONLY}" -eq 0 ]]; then
-    have_cmd geneBody_coverage.py || die "geneBody_coverage.py still not found after installation"
-  fi
-  have_cmd samtools || die "samtools still not found after installation"
+  run_in_rseqc_env bash -lc 'command -v infer_experiment.py >/dev/null 2>&1' \
+    || die "infer_experiment.py not found in env ${RSEQC_ENV_NAME}"
+
+  run_in_rseqc_env bash -lc 'command -v samtools >/dev/null 2>&1' \
+    || die "samtools not found in env ${RSEQC_ENV_NAME}"
+
   if [[ "${MAKE_BED12}" -eq 1 ]]; then
-    have_cmd gtfToGenePred || die "gtfToGenePred still not found after installation"
-    have_cmd genePredToBed || die "genePredToBed still not found after installation"
+    run_in_rseqc_env bash -lc 'command -v gtfToGenePred >/dev/null 2>&1' \
+      || die "gtfToGenePred not found in env ${RSEQC_ENV_NAME}"
+    run_in_rseqc_env bash -lc 'command -v genePredToBed >/dev/null 2>&1' \
+      || die "genePredToBed not found in env ${RSEQC_ENV_NAME}"
   fi
 
-  log "Tool installation/check completed successfully."
+  if [[ "${INFER_ONLY}" -eq 0 ]]; then
+    run_in_rseqc_env bash -lc 'command -v geneBody_coverage.py >/dev/null 2>&1' \
+      || die "geneBody_coverage.py not found in env ${RSEQC_ENV_NAME}"
+  fi
 }
 
 # -------------------------
@@ -156,17 +146,16 @@ if [[ -n "${BAM}" && -n "${BAM_DIR}" ]]; then
 fi
 
 # -------------------------
-# Ensure tools are available
+# Prepare dedicated env
 # -------------------------
-install_missing_tools
+create_rseqc_env_if_needed
+check_tools_in_rseqc_env
 
 # -------------------------
 # Resolve/build BED12
 # -------------------------
 if [[ "${MAKE_BED12}" -eq 1 ]]; then
-  if [[ -z "${GTF}" ]]; then
-    die "--make-bed12 requires --gtf"
-  fi
+  [[ -n "${GTF}" ]] || die "--make-bed12 requires --gtf"
   [[ -f "${GTF}" ]] || die "GTF not found: ${GTF}"
 
   if [[ -z "${BED_OUT}" ]]; then
@@ -177,10 +166,10 @@ if [[ "${MAKE_BED12}" -eq 1 ]]; then
   TMP_GP="${BED_OUT%.bed12}.genepred"
 
   log "Converting GTF -> GenePred"
-  gtfToGenePred "${GTF}" "${TMP_GP}"
+  run_in_rseqc_env gtfToGenePred "${GTF}" "${TMP_GP}"
 
   log "Converting GenePred -> BED12"
-  genePredToBed "${TMP_GP}" "${BED_OUT}"
+  run_in_rseqc_env genePredToBed "${TMP_GP}" "${BED_OUT}"
 
   rm -f "${TMP_GP}"
   BED="${BED_OUT}"
@@ -238,17 +227,17 @@ for BAM_FILE in "${BAMS[@]}"; do
 
   if [[ ! -f "${BAM_FILE}.bai" && ! -f "${BAM_FILE%.bam}.bai" ]]; then
     log "Indexing BAM with samtools"
-    samtools index "${BAM_FILE}"
+    run_in_rseqc_env samtools index "${BAM_FILE}"
   fi
 
   log "Running infer_experiment.py"
-  infer_experiment.py -i "${BAM_FILE}" -r "${BED}" \
+  run_in_rseqc_env infer_experiment.py -i "${BAM_FILE}" -r "${BED}" \
     > "${OUTDIR}/infer_experiment.txt" \
     2> "${OUTDIR}/infer_experiment.log" || true
 
   if [[ "${INFER_ONLY}" -eq 0 ]]; then
     log "Running geneBody_coverage.py"
-    geneBody_coverage.py -i "${BAM_FILE}" -r "${BED}" -o "${OUTDIR}/geneBody" \
+    run_in_rseqc_env geneBody_coverage.py -i "${BAM_FILE}" -r "${BED}" -o "${OUTDIR}/geneBody" \
       > "${OUTDIR}/geneBody_coverage.log" 2>&1 || true
   fi
 done
