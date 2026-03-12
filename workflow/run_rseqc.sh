@@ -188,9 +188,31 @@ if [[ "${MAKE_BED12}" -eq 1 ]]; then
 
   mkdir -p "$(dirname "${BED_OUT}")"
   TMP_GP="${BED_OUT%.bed12}.genepred"
+  SANITIZED_GTF="${BED_OUT%.bed12}.sanitized.gtf"
 
-  log "Converting GTF -> GenePred (ignoring groups without exons)"
-  run_in_rseqc_env gtfToGenePred -ignoreGroupsWithoutExons "${GTF}" "${TMP_GP}"
+  log "Sanitizing GTF: making unknown_transcript_* IDs unique per contig/strand"
+  awk '
+    BEGIN { FS=OFS="\t" }
+    /^#/ { print; next }
+    {
+      attrs = $9
+      if (attrs ~ /transcript_id "unknown_transcript_[^"]+"/) {
+        strand = ($7 == "+" ? "plus" : ($7 == "-" ? "minus" : "unk"))
+        match(attrs, /transcript_id "unknown_transcript_[^"]+"/)
+        old = substr(attrs, RSTART, RLENGTH)
+        tid = old
+        sub(/^transcript_id "/, "", tid)
+        sub(/"$/, "", tid)
+        newtid = "transcript_id \"" tid "__" $1 "__" strand "\""
+        sub(/transcript_id "unknown_transcript_[^"]+"/, newtid, attrs)
+      }
+      $9 = attrs
+      print
+    }
+  ' "${GTF}" > "${SANITIZED_GTF}"
+
+  log "Converting sanitized GTF -> GenePred"
+  run_in_rseqc_env gtfToGenePred -ignoreGroupsWithoutExons -allErrors "${SANITIZED_GTF}" "${TMP_GP}"
 
   log "Converting GenePred -> BED12"
   run_in_rseqc_env genePredToBed "${TMP_GP}" "${BED_OUT}"
