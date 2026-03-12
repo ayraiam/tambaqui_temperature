@@ -47,9 +47,11 @@ GTF=""
 STAR_INDEX=""
 READ_LENGTH="151"
 STRANDNESS="0"
+LIBRARY_TYPE="PE"
 MAKE_BED12=0
 BED12_OUT=""
-LIBRARY_TYPE="PE"
+COUNTS_DIR=""
+TMP_DIR=""
 
 usage() {
   cat <<EOF
@@ -85,18 +87,20 @@ screen:
   --screen                Run libsQC inside detached screen session
   --screen-name STR       Screen session name (default: libsQC_illumina)
 
-STAR mapping / counting:
-  --star                  Run STAR mapping on trimmed reads
-  --star-index            Build STAR genome index
-  --featurecounts         Run featureCounts on existing STAR BAMs
-  --genome-fa PATH        Genome FASTA file
-  --gtf PATH              Annotation GTF file
-  --star-index-dir PATH   Directory for STAR genome index
-  --read-length INT       Read length (default: 151)
-  --strandness 0|1|2      featureCounts strandedness (default: 0)
-  --make-bed12            Create BED12 from GTF for RSeQC
-  --bed12-out PATH        Output BED12 file path
-  --library-type PE|SE    Library type for featureCounts (default: PE)
+  STAR mapping / counting:
+    --star                  Run STAR mapping on trimmed reads
+    --star-index            Build STAR genome index
+    --featurecounts         Run featureCounts on existing STAR BAMs
+    --genome-fa PATH        Genome FASTA file
+    --gtf PATH              Annotation GTF file
+    --star-index-dir PATH   Directory for STAR genome index
+    --read-length INT       Read length (default: 151)
+    --strandness 0|1|2      featureCounts strandedness (default: 0)
+    --make-bed12            Create BED12 from GTF for RSeQC
+    --bed12-out PATH        Output BED12 file path
+    --library-type PE|SE    Library type for featureCounts (default: PE)
+    --counts-dir PATH       Output directory for featureCounts files
+    --tmp-dir PATH          Temporary directory for featureCounts
 
 Notes:
   You can also toggle via environment variables:
@@ -142,6 +146,8 @@ while [[ $# -gt 0 ]]; do
     --bed12-out) BED12_OUT="$2"; shift 2 ;;
     --qc-summary-only) RUN_QC_SUMMARY_ONLY=1; shift 1 ;;
     --library-type) LIBRARY_TYPE="$2"; shift 2 ;;
+    --counts-dir) COUNTS_DIR="$2"; shift 2 ;;
+    --tmp-dir) TMP_DIR="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
@@ -179,6 +185,9 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "RSEQC_INFER_ONLY: ${RSEQC_INFER_ONLY}"
   echo "RSEQC_GENE_BODY_ONLY: ${RSEQC_GENE_BODY_ONLY}"
   echo "STRANDNESS: ${STRANDNESS}"
+  echo "LIBRARY_TYPE: ${LIBRARY_TYPE}"
+  echo "COUNTS_DIR: ${COUNTS_DIR}"
+  echo "TMP_DIR: ${TMP_DIR}"
   echo "=========================================="
 } > "$INVOCATION_LOG"
 
@@ -212,6 +221,8 @@ export MAKE_BED12="$MAKE_BED12"
 export BED12_OUT="$BED12_OUT"
 export RUN_QC_SUMMARY_ONLY="$RUN_QC_SUMMARY_ONLY"
 export LIBRARY_TYPE="$LIBRARY_TYPE"
+export COUNTS_DIR="$COUNTS_DIR"
+export TMP_DIR="$TMP_DIR"
 bash workflow/run_libsQC_illumina.sh
 EOF
   )
@@ -253,6 +264,8 @@ if [[ "${RUN_STAR_INDEX}" -eq 1 || "${RUN_STAR}" -eq 1 || "${RUN_FEATURECOUNTS}"
   [[ "${RUN_FEATURECOUNTS}" -eq 1 ]] && STAR_ARGS+=( --counts )
   [[ "${MAKE_BED12}" -eq 1 ]] && STAR_ARGS+=( --make-bed12 )
   [[ -n "${BED12_OUT}" ]] && STAR_ARGS+=( --bed12-out "${BED12_OUT}" )
+  [[ -n "${COUNTS_DIR}" ]] && STAR_ARGS+=( --counts-dir "${COUNTS_DIR}" )
+  [[ -n "${TMP_DIR}" ]] && STAR_ARGS+=( --tmp-dir "${TMP_DIR}" )
 
   bash workflow/run_star.sh "${STAR_ARGS[@]}"
 fi
