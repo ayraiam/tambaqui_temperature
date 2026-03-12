@@ -93,6 +93,26 @@ conda_env_exists() {
   conda env list | awk '{print $1}' | grep -Fxq "$1"
 }
 
+write_default_rseqc_env_file() {
+  mkdir -p "$(dirname "${RSEQC_ENV_FILE}")"
+
+  cat > "${RSEQC_ENV_FILE}" <<EOF
+name: ${RSEQC_ENV_NAME}
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.12
+  - rseqc
+  - samtools
+  - ucsc-gtftogenepred
+  - ucsc-genepredtobed
+EOF
+
+  log "Created default RSeQC environment file: ${RSEQC_ENV_FILE}"
+}
+
 create_rseqc_env_if_needed() {
   ensure_conda_available
 
@@ -101,7 +121,10 @@ create_rseqc_env_if_needed() {
     return 0
   fi
 
-  [[ -f "${RSEQC_ENV_FILE}" ]] || die "RSeQC env YAML not found: ${RSEQC_ENV_FILE}"
+  if [[ ! -f "${RSEQC_ENV_FILE}" ]]; then
+    log "RSeQC env YAML not found. Creating default one."
+    write_default_rseqc_env_file
+  fi
 
   log "Creating dedicated RSeQC env: ${RSEQC_ENV_NAME}"
   log "Using env file: ${RSEQC_ENV_FILE}"
