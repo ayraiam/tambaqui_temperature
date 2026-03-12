@@ -49,6 +49,7 @@ READ_LENGTH="151"
 STRANDNESS="0"
 MAKE_BED12=0
 BED12_OUT=""
+LIBRARY_TYPE="PE"
 
 usage() {
   cat <<EOF
@@ -95,6 +96,7 @@ STAR mapping / counting:
   --strandness 0|1|2      featureCounts strandedness (default: 0)
   --make-bed12            Create BED12 from GTF for RSeQC
   --bed12-out PATH        Output BED12 file path
+  --library-type PE|SE    Library type for featureCounts (default: PE)
 
 Notes:
   You can also toggle via environment variables:
@@ -139,6 +141,7 @@ while [[ $# -gt 0 ]]; do
     --make-bed12) MAKE_BED12=1; shift ;;
     --bed12-out) BED12_OUT="$2"; shift 2 ;;
     --qc-summary-only) RUN_QC_SUMMARY_ONLY=1; shift 1 ;;
+    --library-type) LIBRARY_TYPE="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
@@ -208,6 +211,7 @@ export STRANDNESS="$STRANDNESS"
 export MAKE_BED12="$MAKE_BED12"
 export BED12_OUT="$BED12_OUT"
 export RUN_QC_SUMMARY_ONLY="$RUN_QC_SUMMARY_ONLY"
+export LIBRARY_TYPE="$LIBRARY_TYPE"
 bash workflow/run_libsQC_illumina.sh
 EOF
   )
@@ -241,6 +245,7 @@ if [[ "${RUN_STAR_INDEX}" -eq 1 || "${RUN_STAR}" -eq 1 || "${RUN_FEATURECOUNTS}"
     --trim-dir "${WDIR}/${RESULTS}/trimmed"
     --read-length "${READ_LENGTH}"
     --strandness "${STRANDNESS}"
+    --library-type "${LIBRARY_TYPE}"
   )
 
   [[ "${RUN_STAR_INDEX}" -eq 1 ]] && STAR_ARGS+=( --index )
