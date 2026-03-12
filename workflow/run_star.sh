@@ -22,6 +22,8 @@ MAKE_BED12=0
 BED12_OUT=""
 
 LIBRARY_TYPE="PE"
+COUNTS_DIR=""
+TMP_DIR=""
 
 usage() {
   cat <<EOF
@@ -40,6 +42,7 @@ Actions:
   --make-bed12              Create BED12 from GTF for RSeQC
 
 Optional:
+Optional:
   --threads INT             (default: \$THREADS)
   --results DIR             (default: results)
   --trim-dir DIR            (default: results/trimmed)
@@ -47,6 +50,9 @@ Optional:
   --sjdb-overhang INT       (default: read_length-1)
   --strandness 0|1|2        featureCounts strandedness (default: 0)
   --bed12-out PATH          Output BED12 path (default: reference/genes.bed12)
+  --library-type PE|SE      Library type for featureCounts (default: PE)
+  --counts-dir PATH         Output directory for featureCounts files
+  --tmp-dir PATH            Temporary directory for featureCounts
 
 EOF
   exit 0
@@ -69,6 +75,8 @@ while [[ $# -gt 0 ]]; do
     --counts) RUN_COUNTS=1; shift ;;
     --make-bed12) MAKE_BED12=1; shift ;;
     --library-type) LIBRARY_TYPE="$2"; shift 2 ;;
+    --counts-dir) COUNTS_DIR="$2"; shift 2 ;;
+    --tmp-dir) TMP_DIR="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1" >&2; usage ;;
   esac
@@ -194,7 +202,7 @@ fi
 
 STAR_OUT="${RESULTS}/star"
 STAR_QC="${RESULTS}/star_qc"
-COUNTS_DIR="${RESULTS}/counts"
+[[ -n "${COUNTS_DIR}" ]] || COUNTS_DIR="${RESULTS}/counts"
 mkdir -p "${STAR_OUT}" "${STAR_QC}" "${COUNTS_DIR}"
 
 if [[ "${RUN_MAP}" -eq 1 ]]; then
@@ -279,6 +287,14 @@ if [[ "${RUN_MAP}" -eq 1 ]]; then
   fi
 
   echo ">>> Mapping finished."
+fi
+
+if [[ -n "${TMP_DIR}" ]]; then
+  mkdir -p "${TMP_DIR}"
+  export TMPDIR="${TMP_DIR}"
+  export TMP="${TMP_DIR}"
+  export TEMP="${TMP_DIR}"
+  echo ">>> featureCounts temp dir: ${TMP_DIR}"
 fi
 
 if [[ "${RUN_COUNTS}" -eq 1 ]]; then
