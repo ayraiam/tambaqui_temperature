@@ -16,7 +16,12 @@ RUN_LIBSQC=1
 RAW_QC_ONLY=0
 RUN_RSEQC=0
 RSEQC_BED=""
+RSEQC_GTF=""
+RSEQC_BAM=""
 RSEQC_BAM_DIR=""
+RSEQC_MAKE_BED12=0
+RSEQC_BED_OUT=""
+RSEQC_INFER_ONLY=1
 SKIP_RAW_QC=0
 RUN_QC_SUMMARY_ONLY=0
 
@@ -52,9 +57,14 @@ General:
   --fastq-dir PATH      Input FASTQ dir (default: data)
   --results DIR         Output root (default: results)
   --raw-qc-only         Run only FastQC+MultiQC on raw reads (skip fastp + trimmed QC + seqkit)
-  --rseqc              Run RSeQC checks (requires BAMs + BED12)
-  --rseqc-bed PATH     Gene model in BED12 format for RSeQC
-  --rseqc-bam-dir DIR  Directory containing coordinate-sorted BAMs
+  --rseqc                 Run RSeQC as a separate stage
+  --rseqc-bam PATH        Single coordinate-sorted BAM
+  --rseqc-bam-dir DIR     Directory containing coordinate-sorted BAMs
+  --rseqc-bed PATH        BED12 gene model for RSeQC
+  --rseqc-gtf PATH        GTF annotation (used to build BED12 if requested)
+  --rseqc-make-bed12      Convert GTF -> BED12 for RSeQC
+  --rseqc-bed-out PATH    Output BED12 path
+  --rseqc-full            Run infer_experiment.py + geneBody_coverage.py
   --qc-summary-only      Build only the final QC summary table from existing seqkit TSVs
 
 Stage control:
@@ -101,8 +111,13 @@ while [[ $# -gt 0 ]]; do
     --screen-name) SCREEN_NAME="$2"; shift 2 ;;
     --raw-qc-only) RAW_QC_ONLY=1; shift 1 ;;
     --rseqc) RUN_RSEQC=1; shift ;;
-    --rseqc-bed) RSEQC_BED="$2"; shift 2 ;;
+    --rseqc-bam) RSEQC_BAM="$2"; shift 2 ;;
     --rseqc-bam-dir) RSEQC_BAM_DIR="$2"; shift 2 ;;
+    --rseqc-bed) RSEQC_BED="$2"; shift 2 ;;
+    --rseqc-gtf) RSEQC_GTF="$2"; shift 2 ;;
+    --rseqc-make-bed12) RSEQC_MAKE_BED12=1; shift 1 ;;
+    --rseqc-bed-out) RSEQC_BED_OUT="$2"; shift 2 ;;
+    --rseqc-full) RSEQC_INFER_ONLY=0; shift 1 ;;
     --skip-raw-qc) SKIP_RAW_QC=1; shift ;;
     --star) RUN_STAR=1; shift ;;
     --star-index) RUN_STAR_INDEX=1; shift ;;
@@ -167,9 +182,6 @@ export FASTP_LEN_MIN="$FASTP_LEN_MIN"
 export FASTP_TRIM_POLYG="$FASTP_TRIM_POLYG"
 export FASTP_CORRECTION="$FASTP_CORRECTION"
 export RAW_QC_ONLY="$RAW_QC_ONLY"
-export RUN_RSEQC="$RUN_RSEQC"
-export RSEQC_BED="$RSEQC_BED"
-export RSEQC_BAM_DIR="$RSEQC_BAM_DIR"
 export SKIP_RAW_QC="$SKIP_RAW_QC"
 export RUN_STAR="$RUN_STAR"
 export RUN_STAR_INDEX="$RUN_STAR_INDEX"
@@ -224,4 +236,23 @@ if [[ "${RUN_STAR_INDEX}" -eq 1 || "${RUN_STAR}" -eq 1 || "${MAKE_BED12}" -eq 1 
   [[ -n "${BED12_OUT}" ]] && STAR_ARGS+=( --bed12-out "${BED12_OUT}" )
 
   bash workflow/run_star.sh "${STAR_ARGS[@]}"
+fi
+
+# -------------------
+# RSeQC stage
+# -------------------
+if [[ "${RUN_RSEQC}" -eq 1 ]]; then
+  RSEQC_ARGS=(
+    --outroot "${WDIR}/${RESULTS}/rseqc"
+  )
+
+  [[ -n "${RSEQC_BAM}" ]] && RSEQC_ARGS+=( --bam "${RSEQC_BAM}" )
+  [[ -n "${RSEQC_BAM_DIR}" ]] && RSEQC_ARGS+=( --bam-dir "${RSEQC_BAM_DIR}" )
+  [[ -n "${RSEQC_BED}" ]] && RSEQC_ARGS+=( --bed "${RSEQC_BED}" )
+  [[ -n "${RSEQC_GTF}" ]] && RSEQC_ARGS+=( --gtf "${RSEQC_GTF}" )
+  [[ "${RSEQC_MAKE_BED12}" -eq 1 ]] && RSEQC_ARGS+=( --make-bed12 )
+  [[ -n "${RSEQC_BED_OUT}" ]] && RSEQC_ARGS+=( --bed-out "${RSEQC_BED_OUT}" )
+  [[ "${RSEQC_INFER_ONLY}" -eq 1 ]] && RSEQC_ARGS+=( --infer-only )
+
+  bash workflow/run_rseqc.sh "${RSEQC_ARGS[@]}"
 fi
