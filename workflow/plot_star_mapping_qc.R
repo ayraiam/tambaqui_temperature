@@ -18,7 +18,10 @@ outdir <- args[[2]]
 
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
-df <- read_tsv(summary_tsv, show_col_types = FALSE)
+df <- read_tsv(summary_tsv, show_col_types = FALSE) %>%
+  mutate(
+    sample = sub("^(RFA-[0-9]+).*", "\\1", sample)
+  )
 
 sample_levels <- df %>%
   mutate(
