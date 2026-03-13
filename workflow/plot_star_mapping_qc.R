@@ -5,6 +5,7 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(tidyr)
   library(ggplot2)
+  library(ggbeeswarm)
 })
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -18,6 +19,35 @@ outdir <- args[[2]]
 counts_tsv <- args[[3]]
 
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+
+sample_dot_palette <- c(
+  "#c31f22",
+  "#e5ebf5",
+  "#000000",
+  "#7b7b7b",
+  "#8ecdcb",
+  "#1e6289",
+  "#efe444",
+  "#e69f05",
+  "#7c1718",
+  "#4a4a4a",
+  "#bfc7d5",
+  "#4fb6a8",
+  "#2f8fb3",
+  "#f4a261",
+  "#ffd166"
+)
+
+# Paired-like palette without the heavy green
+mapping_qc_palette <- c(
+  "Uniquely mapped" = "#a6cee3",
+  "Mapped to multiple loci" = "#1f78b4",
+  "Mapped to too many loci" = "#b2df8a",
+  "Unmapped: too many mismatches" = "#fb9a99",
+  "Unmapped: too short" = "#e31a1c",
+  "Unmapped: other" = "#fdbf6f",
+  "Chimeric" = "#ff7f00"
+)
 
 ordered_rfa_levels <- function(x) {
   tibble(sample = unique(x)) %>%
@@ -102,7 +132,7 @@ plot_mapping_qc <- function(summary_tsv, outdir) {
   
   p_pct <- ggplot(pct_long, aes(x = sample, y = percent, fill = category)) +
     geom_col(width = 0.8) +
-    scale_fill_brewer(palette = "Paired") +
+    scale_fill_manual(values = mapping_qc_palette) +
     labs(
       title = "",
       x = NULL,
@@ -183,14 +213,8 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
   mode(count_matrix) <- "numeric"
   
   sample_names <- colnames(count_matrix)
-  
-  # featureCounts column names are usually full BAM paths
-  # extract the sample directory name
   sample_names <- basename(dirname(sample_names))
-  
-  # reduce to RFA-number only
   sample_names <- sub("^(RFA-[0-9]+).*", "\\1", sample_names)
-  
   colnames(count_matrix) <- sample_names
   
   if (anyDuplicated(colnames(count_matrix))) {
@@ -219,11 +243,41 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
   
   write_tsv(qc_table, file.path(outdir, "featurecounts_sample_qc.tsv"))
   
+  set.seed(123)
+  
+  dot_colors <- sample(sample_dot_palette, size = nrow(qc_table), replace = FALSE)
+  
+  qc_table_lib <- qc_table %>%
+    mutate(
+      sample = factor(sample, levels = sample_levels),
+      dot_color = dot_colors,
+      group = "Assigned reads"
+    )
+  
   p_lib <- ggplot(
-    qc_table,
-    aes(x = factor(sample, levels = sample_levels), y = library_size)
+    qc_table_lib,
+    aes(x = group, y = library_size)
   ) +
-    geom_col(width = 0.8) +
+    geom_violin(
+      fill = "grey90",
+      color = "black",
+      width = 0.9,
+      alpha = 0.8,
+      trim = FALSE
+    ) +
+    geom_boxplot(
+      width = 0.18,
+      outlier.shape = NA,
+      fill = "white",
+      color = "black"
+    ) +
+    geom_beeswarm(
+      aes(color = sample),
+      size = 3.2,
+      cex = 2.8,
+      priority = "density"
+    ) +
+    scale_color_manual(values = setNames(qc_table_lib$dot_color, qc_table_lib$sample)) +
     labs(
       title = "",
       x = NULL,
@@ -231,25 +285,22 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
     ) +
     theme_classic(base_size = 11) +
     theme(
-      axis.text.x = element_text(
-        angle = 45,
-        hjust = 1,
-        vjust = 1,
-        size = 8
-      )
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      legend.position = "none"
     )
   
   ggsave(
-    filename = file.path(outdir, "featurecounts_library_size_per_sample.pdf"),
+    filename = file.path(outdir, "featurecounts_library_size_violin_box_beeswarm.pdf"),
     plot = p_lib,
-    width = 10,
+    width = 4.5,
     height = 5
   )
   
   ggsave(
-    filename = file.path(outdir, "featurecounts_library_size_per_sample.png"),
+    filename = file.path(outdir, "featurecounts_library_size_violin_box_beeswarm.png"),
     plot = p_lib,
-    width = 10,
+    width = 4.5,
     height = 5,
     dpi = 300
   )
