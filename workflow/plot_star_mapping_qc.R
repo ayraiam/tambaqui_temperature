@@ -268,13 +268,13 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
     geom_beeswarm(
       aes(color = sample),
       size = 3.2,
-      cex = 2.8,
+      cex = 3.5,
       priority = "density"
     ) +
     geom_boxplot(
       width = 0.18,
       outlier.shape = NA,
-      fill = "white",
+      fill = "transparent",
       color = "black",
       alpha = .75
     ) +
@@ -282,7 +282,7 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
     labs(
       title = "",
       x = NULL,
-      y = "\nAssigned reads"
+      y = "Assigned reads\n"
     ) +
     theme_classic(base_size = 11) +
     theme(
@@ -301,7 +301,7 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
   ggsave(
     filename = file.path(outdir, "featurecounts_library_size_violin_box_beeswarm.png"),
     plot = p_lib,
-    width = 2.5,
+    width = 3,
     height = 5,
     dpi = 300
   )
@@ -327,13 +327,13 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
     geom_beeswarm(
       aes(color = sample),
       size = 3.2,
-      cex = 2.8,
+      cex = 3.5,
       priority = "density"
     ) +
     geom_boxplot(
       width = 0.18,
       outlier.shape = NA,
-      fill = "white",
+      fill = "transparent",
       color = "black",
       alpha = .75
     ) +
@@ -341,7 +341,7 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
     labs(
       title = "",
       x = NULL,
-      y = "\nDetected genes"
+      y = "Detected genes\n"
     ) +
     theme_classic(base_size = 11) +
     theme(
@@ -360,7 +360,7 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
   ggsave(
     filename = file.path(outdir, "featurecounts_detected_genes_violin_box_beeswarm.png"),
     plot = p_det,
-    width = 2.5,
+    width = 3,
     height = 5,
     dpi = 300
   )
