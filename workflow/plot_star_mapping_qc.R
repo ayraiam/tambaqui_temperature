@@ -183,11 +183,22 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
   mode(count_matrix) <- "numeric"
   
   sample_names <- colnames(count_matrix)
-  sample_names <- basename(sample_names)
-  sample_names <- sub("\\.Aligned\\.sortedByCoord\\.out\\.bam$", "", sample_names)
-  sample_names <- sub("\\.bam$", "", sample_names)
+  
+  # featureCounts column names are usually full BAM paths
+  # extract the sample directory name
+  sample_names <- basename(dirname(sample_names))
+  
+  # reduce to RFA-number only
   sample_names <- sub("^(RFA-[0-9]+).*", "\\1", sample_names)
+  
   colnames(count_matrix) <- sample_names
+  
+  if (anyDuplicated(colnames(count_matrix))) {
+    stop(
+      "Duplicate sample names detected after parsing featureCounts columns: ",
+      paste(unique(colnames(count_matrix)[duplicated(colnames(count_matrix))]), collapse = ", ")
+    )
+  }
   
   library_sizes <- colSums(count_matrix)
   detected_genes <- colSums(count_matrix > 0)
@@ -198,7 +209,6 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
     detected_genes = as.numeric(detected_genes),
     stringsAsFactors = FALSE
   ) %>%
-    distinct() %>%
     mutate(
       sample_num = as.numeric(sub("^RFA-([0-9]+).*", "\\1", sample))
     ) %>%
