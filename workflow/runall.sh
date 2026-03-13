@@ -56,7 +56,7 @@ STAR_TRIM_DIR=""
 
 RUN_MAPPING_QC_VAR=0
 MAPQC_STAR_DIR=""
-MAPQC_OUTDIR="${WDIR}/results/FigMappingQCandVar"
+MAPQC_OUTDIR=""
 MAPQC_ENV_NAME="mappingqc_var_env"
 MAPQC_ENV_FILE="envs/mappingqc_var_env.yml"
 
@@ -178,6 +178,11 @@ if [[ "${RESULTS}" = /* ]]; then
   RESULTS_ABS="${RESULTS}"
 else
   RESULTS_ABS="${WDIR}/${RESULTS}"
+fi
+
+# Resolve default output dir for mapping QC plots
+if [[ -z "${MAPQC_OUTDIR}" ]]; then
+  MAPQC_OUTDIR="${WDIR}/results/FigMappingQCandVar"
 fi
 
 mkdir -p logs metadata
