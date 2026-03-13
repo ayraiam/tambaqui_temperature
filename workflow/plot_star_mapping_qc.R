@@ -260,22 +260,23 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
   ) +
     geom_violin(
       fill = "grey90",
-      color = "black",
+      color = "transparent",
       width = 0.9,
-      alpha = 0.8,
+      alpha = 0.75,
       trim = FALSE
-    ) +
-    geom_boxplot(
-      width = 0.18,
-      outlier.shape = NA,
-      fill = "white",
-      color = "black"
-    ) +
+    )  +
     geom_beeswarm(
       aes(color = sample),
       size = 3.2,
       cex = 2.8,
       priority = "density"
+    ) +
+    geom_boxplot(
+      width = 0.18,
+      outlier.shape = NA,
+      fill = "white",
+      color = "black",
+      alpha = .75
     ) +
     scale_color_manual(values = setNames(qc_table_lib$dot_color, qc_table_lib$sample)) +
     labs(
@@ -287,7 +288,7 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
     theme(
       axis.text.x = element_blank(),
       axis.ticks.x = element_blank(),
-      legend.position = "none"
+      legend.position = "right"
     )
   
   ggsave(
@@ -300,16 +301,43 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
   ggsave(
     filename = file.path(outdir, "featurecounts_library_size_violin_box_beeswarm.png"),
     plot = p_lib,
-    width = 4.5,
+    width = 2.5,
     height = 5,
     dpi = 300
   )
   
+  qc_table_det <- qc_table %>%
+    mutate(
+      sample = factor(sample, levels = sample_levels),
+      dot_color = dot_colors,
+      group = "Detected genes"
+    )
+  
   p_det <- ggplot(
-    qc_table,
-    aes(x = factor(sample, levels = sample_levels), y = detected_genes)
+    qc_table_det,
+    aes(x = group, y = detected_genes)
   ) +
-    geom_col(width = 0.8) +
+    geom_violin(
+      fill = "grey90",
+      color = "transparent",
+      width = 0.9,
+      alpha = 0.75,
+      trim = FALSE
+    )  +
+    geom_beeswarm(
+      aes(color = sample),
+      size = 3.2,
+      cex = 2.8,
+      priority = "density"
+    ) +
+    geom_boxplot(
+      width = 0.18,
+      outlier.shape = NA,
+      fill = "white",
+      color = "black",
+      alpha = .75
+    ) +
+    scale_color_manual(values = setNames(qc_table_det$dot_color, qc_table_det$sample)) +
     labs(
       title = "",
       x = NULL,
@@ -317,25 +345,22 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
     ) +
     theme_classic(base_size = 11) +
     theme(
-      axis.text.x = element_text(
-        angle = 45,
-        hjust = 1,
-        vjust = 1,
-        size = 8
-      )
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      legend.position = "right"
     )
   
   ggsave(
-    filename = file.path(outdir, "featurecounts_detected_genes_per_sample.pdf"),
+    filename = file.path(outdir, "featurecounts_detected_genes_violin_box_beeswarm.pdf"),
     plot = p_det,
-    width = 10,
+    width = 4.5,
     height = 5
   )
   
   ggsave(
-    filename = file.path(outdir, "featurecounts_detected_genes_per_sample.png"),
+    filename = file.path(outdir, "featurecounts_detected_genes_violin_box_beeswarm.png"),
     plot = p_det,
-    width = 10,
+    width = 2.5,
     height = 5,
     dpi = 300
   )
