@@ -2,6 +2,7 @@
 set -euo pipefail
 
 STAR_DIR=""
+COUNTS_TSV=""
 OUTDIR=""
 ENV_NAME="mappingqc_var_env"
 ENV_FILE="envs/mappingqc_var_env.yml"
@@ -12,12 +13,13 @@ Usage:
   bash workflow/run_mapping_qc_var.sh [options]
 
 Required:
-  --star-dir DIR      STAR directory with sample subdirs containing Log.final.out
-  --outdir DIR        Output directory for parsed tables and plots
+  --star-dir DIR       STAR directory with sample subdirs containing Log.final.out
+  --counts-tsv PATH    featureCounts.tsv file
+  --outdir DIR         Output directory for parsed tables and plots
 
 Optional:
-  --env-name STR      Conda env name (default: mappingqc_var_env)
-  --env-file PATH     YAML file to write/export env snapshot (default: envs/mappingqc_var_env.yml)
+  --env-name STR       Conda env name (default: mappingqc_var_env)
+  --env-file PATH      YAML file to write/export env snapshot (default: envs/mappingqc_var_env.yml)
 EOF
   exit 0
 }
@@ -25,6 +27,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --star-dir) STAR_DIR="$2"; shift 2 ;;
+    --counts-tsv) COUNTS_TSV="$2"; shift 2 ;;
     --outdir) OUTDIR="$2"; shift 2 ;;
     --env-name) ENV_NAME="$2"; shift 2 ;;
     --env-file) ENV_FILE="$2"; shift 2 ;;
@@ -35,6 +38,8 @@ done
 
 [[ -n "${STAR_DIR}" ]] || { echo "ERROR: --star-dir is required" >&2; exit 2; }
 [[ -d "${STAR_DIR}" ]] || { echo "ERROR: STAR directory not found: ${STAR_DIR}" >&2; exit 2; }
+[[ -n "${COUNTS_TSV}" ]] || { echo "ERROR: --counts-tsv is required" >&2; exit 2; }
+[[ -f "${COUNTS_TSV}" ]] || { echo "ERROR: featureCounts file not found: ${COUNTS_TSV}" >&2; exit 2; }
 [[ -n "${OUTDIR}" ]] || { echo "ERROR: --outdir is required" >&2; exit 2; }
 
 find_and_source_conda() {
@@ -141,10 +146,11 @@ conda run -n "${ENV_NAME}" python workflow/parse_star_log_final.py \
   --star-dir "${STAR_DIR}" \
   --outdir "${OUTDIR}"
 
-echo ">>> Plotting STAR mapping QC"
+echo ">>> Plotting STAR mapping QC + featureCounts sample QC"
 conda run -n "${ENV_NAME}" Rscript workflow/plot_star_mapping_qc.R \
   "${OUTDIR}/star_mapping_qc_summary.tsv" \
-  "${OUTDIR}"
+  "${OUTDIR}" \
+  "${COUNTS_TSV}"
 
 echo ">>> Done."
 echo ">>> Output dir: ${OUTDIR}"
