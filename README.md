@@ -42,8 +42,11 @@ It provides a structured, re-entrant framework for:
   9) RNA-seq library strandedness inference via RSeQC
   10) Gene body coverage diagnostics
   11) Automatic GTF → BED12 conversion for RSeQC compatibility
-  12) Automatic dependency detection + installation inside Conda environments
-  13) Full provenance logging  
+  12) STAR alignment QC parsing (Log.final.out)
+  13) Automatic generation of mapping QC summary tables
+  14) Visualization of alignment composition across samples
+  15) Automatic dependency detection + installation inside Conda environments
+  16) Full provenance logging    
   
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
@@ -70,12 +73,15 @@ Designed for:
 <pre>
 STRUCTURE
 ---------
-  /workflow/
-   runall.sh                     - Main entrypoint (pipeline controller)
-   run_libsQC_illumina.sh        - QC + trimming logic
-   run_star.sh                   - STAR alignment + featureCounts
-   run_rseqc.sh                  - RSeQC diagnostics + strandedness inference
-   make_qc_summary_table.py      - Build consolidated QC summary table
+   /workflow/
+   runall.sh
+   run_libsQC_illumina.sh
+   run_star.sh
+   run_rseqc.sh
+   run_mapping_qc_var.sh        - STAR Log.final.out parser + QC plotting
+   parse_star_log_final.py      - STAR log parser
+   plot_star_mapping_qc.R       - Mapping QC stacked barplots
+   make_qc_summary_table.py
 
  /envs/                          - Auto-exported Conda environments
  /logs/                          - Timestamped stdout/stderr logs
@@ -86,7 +92,7 @@ STRUCTURE
    genome.fa                     - Reference genome
    annotation.gtf                - Gene annotation
    star_index/                   - STAR genome index
- /results/
+  /results/
    qc_raw/
    multiqc_raw/
    trimmed/
@@ -94,13 +100,11 @@ STRUCTURE
    qc_trimmed/
    multiqc_trimmed/
    summary/
-    seqkit_stats_raw.tsv
-    seqkit_stats_trimmed.tsv
-    qc_summary_table.tsv         - Consolidated QC report
-   star/                         - STAR BAM outputs
-   star_qc/                      - Mapping QC (samtools stats)
-   counts/                       - featureCounts gene matrix
-   rseqc/                        - Optional RNA-seq QC outputs
+   star/
+   star_qc/
+   counts/
+   rseqc/
+   FigMappingQCandVar/          - STAR mapping QC tables + plots
 
  README.md
  LICENSE
@@ -244,6 +248,46 @@ to determine the correct featureCounts parameter:
   -s 0   unstranded
   -s 1   forward-stranded
   -s 2   reverse-stranded
+
+Stage 9 — STAR Mapping QC Visualization
+
+The pipeline can parse STAR alignment logs (Log.final.out)
+to generate a standardized mapping quality report across samples.
+
+Metrics extracted include:
+
+  • Uniquely mapped reads
+  • Reads mapped to multiple loci
+  • Reads mapped to too many loci
+  • Unmapped reads (too many mismatches)
+  • Unmapped reads (too short)
+  • Unmapped reads (other)
+  • Chimeric reads
+
+Outputs:
+
+  results/FigMappingQCandVar/
+      star_mapping_qc_summary.tsv
+      star_mapping_qc_summary.csv
+      star_mapping_qc_stacked_percent.pdf
+      star_mapping_qc_stacked_percent.png
+      star_mapping_qc_stacked_counts.pdf
+      star_mapping_qc_stacked_counts.png
+
+Visualization:
+
+A stacked barplot is generated showing the composition
+of alignment outcomes for each sample, allowing rapid
+identification of mapping issues or outlier libraries.
+
+This stage uses:
+
+  Python (pandas) for log parsing
+  R (ggplot2) for visualization
+
+and runs in a dedicated Conda environment:
+
+  mappingqc_var_env
   
 </pre>
 
@@ -364,14 +408,7 @@ bash workflow/runall.sh \
   --gtf reference/annotation.gtf \
   --star-index-dir reference/star_index
 
-# 10) Run STAR alignment
-bash workflow/runall.sh \
-  --star \
-  --genome-fa reference/genome.fa \
-  --gtf reference/annotation.gtf \
-  --star-index-dir reference/star_index
-
-# 11) Run gene counting from existing BAM files
+# 10) Run gene counting from existing BAM files
 bash workflow/runall.sh \
   --featurecounts \
   --strandness 2 \
@@ -379,10 +416,10 @@ bash workflow/runall.sh \
   --gtf reference/annotation.gtf \
   --star-index-dir reference/star_index
   
-# 12) Build QC summary table only
+# 11) Build QC summary table only
 bash workflow/runall.sh --qc-summary-only
 
-# 13) Determine RNA-seq library strandedness
+# 12) Determine RNA-seq library strandedness
 # (recommended before running featureCounts)
 
 bash workflow/runall.sh \
@@ -398,6 +435,12 @@ Outputs:
 
 Inspect the fractions reported by infer_experiment.py
 to determine the correct featureCounts strandedness mode.
+
+# 13) Generate STAR mapping QC plots
+
+bash workflow/run_mapping_qc_var.sh \
+  --star-dir results/star \
+  --outdir results/FigMappingQCandVar
 </pre>
 
 <pre>
@@ -414,7 +457,25 @@ Installed tools include:
   rseqc
   ucsc-gtftogenepred
   ucsc-genepredtobed
+  Python (pandas)
+  R (ggplot2, dplyr, readr, tidyr)
+Additional environments
 
+mappingqc_var_env
+
+Used for STAR mapping QC visualization and downstream
+analysis figures.
+
+Includes:
+
+  Python
+  pandas
+  R
+  ggplot2
+  dplyr
+  readr
+  tidyr
+  
 If missing, the following packages will be installed automatically
 into the active Conda environment:
 
