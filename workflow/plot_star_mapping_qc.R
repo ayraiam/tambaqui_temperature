@@ -20,7 +20,12 @@ dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
 df <- read_tsv(summary_tsv, show_col_types = FALSE)
 
-sample_levels <- df$sample
+sample_levels <- df %>%
+  mutate(
+    sample_num = as.numeric(sub("^RFA-([0-9]+).*", "\\1", sample))
+  ) %>%
+  arrange(sample_num, sample) %>%
+  pull(sample)
 
 pct_long <- df %>%
   select(
@@ -87,18 +92,23 @@ write_tsv(cnt_long, file.path(outdir, "star_mapping_qc_counts_long.tsv"))
 
 p_pct <- ggplot(pct_long, aes(x = sample, y = percent, fill = category)) +
   geom_col(width = 0.8) +
-  coord_flip() +
+  scale_fill_brewer(palette = "Paired") +
   labs(
-    title = "STAR mapping QC composition by sample",
+    title = "",
     x = NULL,
-    y = "Reads (%)",
+    y = "\nReads (%)",
     fill = NULL
   ) +
-  theme_bw(base_size = 11) +
+  theme_classic(base_size = 11) +
   theme(
     panel.grid.major.y = element_blank(),
     panel.grid.minor = element_blank(),
-    axis.text.y = element_text(size = 8),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1,
+      vjust = 1,
+      size = 8
+    ),
     legend.position = "right"
   )
 
