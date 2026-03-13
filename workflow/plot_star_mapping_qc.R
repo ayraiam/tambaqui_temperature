@@ -274,7 +274,7 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
     geom_boxplot(
       width = 0.18,
       outlier.shape = NA,
-      fill = "transparent",
+      fill = NA,
       color = "black",
       alpha = .75
     ) +
@@ -333,7 +333,7 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
     geom_boxplot(
       width = 0.18,
       outlier.shape = NA,
-      fill = "transparent",
+      fill = NA,
       color = "black",
       alpha = .75
     ) +
