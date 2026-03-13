@@ -59,6 +59,7 @@ MAPQC_STAR_DIR=""
 MAPQC_OUTDIR=""
 MAPQC_ENV_NAME="mappingqc_var_env"
 MAPQC_ENV_FILE="envs/mappingqc_var_env.yml"
+MAPQC_COUNTS_TSV=""
 
 usage() {
   cat <<EOF
@@ -115,6 +116,7 @@ Making Mapping QC & variance Partition figure:
     --mapqc-outdir DIR     Output dir for parser tables and plots
     --mapqc-env-name STR   Conda env name for mapping QC plots
     --mapqc-env-file PATH  Conda YAML file for mapping QC plots
+    --mapqc-counts-tsv PATH  featureCounts.tsv file for library QC plots
 
 Notes:
   You can also toggle via environment variables:
@@ -168,6 +170,7 @@ while [[ $# -gt 0 ]]; do
     --mapqc-outdir) MAPQC_OUTDIR="$2"; shift 2 ;;
     --mapqc-env-name) MAPQC_ENV_NAME="$2"; shift 2 ;;
     --mapqc-env-file) MAPQC_ENV_FILE="$2"; shift 2 ;;
+    --mapqc-counts-tsv) MAPQC_COUNTS_TSV="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
@@ -183,6 +186,15 @@ fi
 # Resolve default output dir for mapping QC plots
 if [[ -z "${MAPQC_OUTDIR}" ]]; then
   MAPQC_OUTDIR="${WDIR}/results/FigMappingQCandVar"
+fi
+
+# Resolve default featureCounts file for mapping QC / sample QC figures
+if [[ -z "${MAPQC_COUNTS_TSV}" ]]; then
+  if [[ -n "${COUNTS_DIR}" ]]; then
+    MAPQC_COUNTS_TSV="${COUNTS_DIR}/featureCounts.tsv"
+  else
+    MAPQC_COUNTS_TSV="${RESULTS_ABS}/counts/featureCounts.tsv"
+  fi
 fi
 
 mkdir -p logs metadata
@@ -226,6 +238,7 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "MAPQC_OUTDIR: ${MAPQC_OUTDIR}"
   echo "MAPQC_ENV_NAME: ${MAPQC_ENV_NAME}"
   echo "MAPQC_ENV_FILE: ${MAPQC_ENV_FILE}"
+  echo "MAPQC_COUNTS_TSV: ${MAPQC_COUNTS_TSV}"
   echo "=========================================="
 } > "$INVOCATION_LOG"
 
@@ -316,6 +329,7 @@ if [[ "${RUN_MAPPING_QC_VAR}" -eq 1 ]]; then
 
   bash workflow/run_mapping_qc_var.sh \
     --star-dir "${MAPQC_STAR_DIR_FINAL}" \
+    --counts-tsv "${MAPQC_COUNTS_TSV}" \
     --outdir "${MAPQC_OUTDIR}" \
     --env-name "${MAPQC_ENV_NAME}" \
     --env-file "${MAPQC_ENV_FILE}"
