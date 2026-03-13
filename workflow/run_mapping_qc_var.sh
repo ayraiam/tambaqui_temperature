@@ -94,6 +94,7 @@ create_env_if_needed() {
     python=3.11 \
     pandas \
     r-base=4.3 \
+    r-ggbeeswarm \
     r-readr \
     r-dplyr \
     r-tidyr \
@@ -108,6 +109,7 @@ create_env_if_needed() {
       python=3.11 \
       pandas \
       r-base=4.3 \
+      r-ggbeeswarm \
       r-readr \
       r-dplyr \
       r-tidyr \
@@ -126,7 +128,7 @@ check_tools() {
   conda run -n "${ENV_NAME}" python -c "import pandas" >/dev/null 2>&1 \
     || { echo "ERROR: pandas not available in env ${ENV_NAME}" >&2; exit 2; }
 
-  conda run -n "${ENV_NAME}" Rscript -e "library(readr); library(dplyr); library(tidyr); library(ggplot2)" >/dev/null 2>&1 \
+  conda run -n "${ENV_NAME}" Rscript -e "library(readr); library(dplyr); library(tidyr); library(ggplot2); library(ggbeeswarm)" >/dev/null 2>&1 \
     || { echo "ERROR: required R packages not available in env ${ENV_NAME}" >&2; exit 2; }
 }
 
