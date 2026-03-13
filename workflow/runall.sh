@@ -52,6 +52,13 @@ MAKE_BED12=0
 BED12_OUT=""
 COUNTS_DIR=""
 TMP_DIR=""
+STAR_TRIM_DIR=""
+
+RUN_MAPPING_QC_VAR=0
+MAPQC_STAR_DIR=""
+MAPQC_OUTDIR="${WDIR}/results/FigMappingQCandVar"
+MAPQC_ENV_NAME="mappingqc_var_env"
+MAPQC_ENV_FILE="envs/mappingqc_var_env.yml"
 
 usage() {
   cat <<EOF
@@ -87,7 +94,7 @@ screen:
   --screen                Run libsQC inside detached screen session
   --screen-name STR       Screen session name (default: libsQC_illumina)
 
-  STAR mapping / counting:
+STAR mapping / counting:
     --star                  Run STAR mapping on trimmed reads
     --star-index            Build STAR genome index
     --featurecounts         Run featureCounts on existing STAR BAMs
@@ -101,6 +108,13 @@ screen:
     --library-type PE|SE    Library type for featureCounts (default: PE)
     --counts-dir PATH       Output directory for featureCounts files
     --tmp-dir PATH          Temporary directory for featureCounts
+
+Making Mapping QC & variance Partition figure:
+    --mapping-qc-var       Parse STAR Log.final.out files and plot mapping QC
+    --mapqc-star-dir DIR   STAR directory containing sample subdirs with Log.final.out
+    --mapqc-outdir DIR     Output dir for parser tables and plots
+    --mapqc-env-name STR   Conda env name for mapping QC plots
+    --mapqc-env-file PATH  Conda YAML file for mapping QC plots
 
 Notes:
   You can also toggle via environment variables:
@@ -140,6 +154,7 @@ while [[ $# -gt 0 ]]; do
     --genome-fa) GENOME_FA="$2"; shift 2 ;;
     --gtf) GTF="$2"; shift 2 ;;
     --star-index-dir) STAR_INDEX="$2"; shift 2 ;;
+    --trim-dir) STAR_TRIM_DIR="$2"; shift 2 ;;
     --read-length) READ_LENGTH="$2"; shift 2 ;;
     --strandness) STRANDNESS="$2"; shift 2 ;;
     --make-bed12) MAKE_BED12=1; shift ;;
@@ -148,10 +163,22 @@ while [[ $# -gt 0 ]]; do
     --library-type) LIBRARY_TYPE="$2"; shift 2 ;;
     --counts-dir) COUNTS_DIR="$2"; shift 2 ;;
     --tmp-dir) TMP_DIR="$2"; shift 2 ;;
+    --mapping-qc-var) RUN_MAPPING_QC_VAR=1; shift 1 ;;
+    --mapqc-star-dir) MAPQC_STAR_DIR="$2"; shift 2 ;;
+    --mapqc-outdir) MAPQC_OUTDIR="$2"; shift 2 ;;
+    --mapqc-env-name) MAPQC_ENV_NAME="$2"; shift 2 ;;
+    --mapqc-env-file) MAPQC_ENV_FILE="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
 done
+
+# Resolve absolute results directory
+if [[ "${RESULTS}" = /* ]]; then
+  RESULTS_ABS="${RESULTS}"
+else
+  RESULTS_ABS="${WDIR}/${RESULTS}"
+fi
 
 mkdir -p logs metadata
 
@@ -188,6 +215,12 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "LIBRARY_TYPE: ${LIBRARY_TYPE}"
   echo "COUNTS_DIR: ${COUNTS_DIR}"
   echo "TMP_DIR: ${TMP_DIR}"
+  echo "STAR_TRIM_DIR: ${STAR_TRIM_DIR}"
+  echo "RUN_MAPPING_QC_VAR: ${RUN_MAPPING_QC_VAR}"
+  echo "MAPQC_STAR_DIR: ${MAPQC_STAR_DIR}"
+  echo "MAPQC_OUTDIR: ${MAPQC_OUTDIR}"
+  echo "MAPQC_ENV_NAME: ${MAPQC_ENV_NAME}"
+  echo "MAPQC_ENV_FILE: ${MAPQC_ENV_FILE}"
   echo "=========================================="
 } > "$INVOCATION_LOG"
 
@@ -252,8 +285,8 @@ if [[ "${RUN_STAR_INDEX}" -eq 1 || "${RUN_STAR}" -eq 1 || "${RUN_FEATURECOUNTS}"
     --gtf "${GTF}"
     --star-index-dir "${STAR_INDEX}"
     --threads "${CPUS}"
-    --results "${WDIR}/${RESULTS}"
-    --trim-dir "${WDIR}/${RESULTS}/trimmed"
+    --results "${RESULTS_ABS}"
+    --trim-dir "${STAR_TRIM_DIR:-${RESULTS_ABS}/trimmed}"
     --read-length "${READ_LENGTH}"
     --strandness "${STRANDNESS}"
     --library-type "${LIBRARY_TYPE}"
@@ -271,11 +304,24 @@ if [[ "${RUN_STAR_INDEX}" -eq 1 || "${RUN_STAR}" -eq 1 || "${RUN_FEATURECOUNTS}"
 fi
 
 # -------------------
+# STAR mapping QC summary / plotting stage
+# -------------------
+if [[ "${RUN_MAPPING_QC_VAR}" -eq 1 ]]; then
+  MAPQC_STAR_DIR_FINAL="${MAPQC_STAR_DIR:-${RESULTS_ABS}/star}"
+
+  bash workflow/run_mapping_qc_var.sh \
+    --star-dir "${MAPQC_STAR_DIR_FINAL}" \
+    --outdir "${MAPQC_OUTDIR}" \
+    --env-name "${MAPQC_ENV_NAME}" \
+    --env-file "${MAPQC_ENV_FILE}"
+fi
+
+# -------------------
 # RSeQC stage
 # -------------------
 if [[ "${RUN_RSEQC}" -eq 1 ]]; then
   RSEQC_ARGS=(
-    --outroot "${WDIR}/${RESULTS}/rseqc"
+    --outroot "${RESULTS_ABS}/rseqc"
   )
 
   [[ -n "${RSEQC_BAM}" ]] && RSEQC_ARGS+=( --bam "${RSEQC_BAM}" )
