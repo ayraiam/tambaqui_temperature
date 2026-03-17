@@ -45,8 +45,10 @@ It provides a structured, re-entrant framework for:
   12) STAR alignment QC parsing (Log.final.out)
   13) Automatic generation of mapping QC summary tables
   14) Visualization of alignment composition across samples
-  15) Automatic dependency detection + installation inside Conda environments
-  16) Full provenance logging    
+  15) FeatureCounts-based sample QC (library size + detected genes)
+  16) Exploratory transcriptomic QC (PCA + sample-to-sample distance heatmap)
+  17) Automatic dependency detection + installation inside Conda environments
+  18) Full provenance logging        
   
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
@@ -81,6 +83,7 @@ STRUCTURE
    run_mapping_qc_var.sh        - STAR Log.final.out parser + QC plotting
    parse_star_log_final.py      - STAR log parser
    plot_star_mapping_qc.R       - Mapping QC stacked barplots
+   plot_pca_distance_qc.R      - PCA + sample-to-sample distance heatmap
    make_qc_summary_table.py
 
  /envs/                          - Auto-exported Conda environments
@@ -288,6 +291,77 @@ This stage uses:
 and runs in a dedicated Conda environment:
 
   mappingqc_var_env
+
+Stage 10 — FeatureCounts Sample QC + Exploratory Analysis
+
+This stage extends QC beyond alignment metrics by leveraging
+gene-level counts to assess sample quality and biological structure.
+
+Inputs:
+  results/counts/featureCounts.tsv
+  metadata/sample_metadata.tsv
+
+This stage generates:
+
+1) Sample-level QC metrics:
+   • Total assigned reads per sample (library size)
+   • Number of detected genes (counts > 0)
+
+Visualization:
+   • Violin + boxplot + beeswarm plots
+   • One point per sample
+   • Custom color palette for individual samples
+
+Outputs:
+  results/FigMappingQCandVar/
+      featurecounts_sample_qc.tsv
+      featurecounts_library_size_violin_box_beeswarm.pdf/png
+      featurecounts_detected_genes_violin_box_beeswarm.pdf/png
+
+2) Principal Component Analysis (PCA):
+
+Two PCA projections are generated:
+
+  • Global PCA (all samples: C0 + T1 + T2)
+  • Subset PCA (T1 vs T2 only)
+
+These allow disentangling:
+
+  • Developmental effects (C0 vs others)
+  • Temperature effects (T1 vs T2)
+
+Outputs:
+  results/FigMappingQCandVar/
+      pca_global_all_samples.pdf/png
+      pca_global_all_samples_scores.tsv
+      pca_t1_vs_t2.pdf/png
+      pca_t1_vs_t2_scores.tsv
+
+3) Sample-to-sample distance heatmap:
+
+Pairwise distances are computed from variance-stabilized expression values.
+
+Visualization:
+  • Hierarchical clustering
+  • Annotation by condition (and optional metadata)
+  • Heatmap of sample similarity
+
+Outputs:
+  results/FigMappingQCandVar/
+      sample_distance_matrix_all_samples.tsv
+      sample_distance_heatmap_all_samples.pdf/png
+
+Methodological notes:
+
+  • Counts are transformed using DESeq2 variance stabilizing transformation (VST)
+  • PCA is computed on VST-transformed data
+  • Distance matrix uses Euclidean distance on VST values
+
+This stage provides a critical bridge between:
+
+  alignment QC → biological interpretation
+
+and is recommended before differential expression analysis.
   
 </pre>
 
@@ -436,11 +510,26 @@ Outputs:
 Inspect the fractions reported by infer_experiment.py
 to determine the correct featureCounts strandedness mode.
 
-# 13) Generate STAR mapping QC plots
+# 13) Full mapping QC + featureCounts QC + PCA + clustering
 
-bash workflow/run_mapping_qc_var.sh \
-  --star-dir results/star \
-  --outdir results/FigMappingQCandVar
+bash workflow/runall.sh \
+  --no-qc \
+  --mapping-qc-var \
+  --mapqc-star-dir /tmp/lab18/results/star \
+  --mapqc-counts-tsv /home/lab18/results/counts/featureCounts.tsv \
+  --mapqc-metadata-tsv /home/lab18/metadata/tambaqui_metadata.tsv \
+  --mapqc-outdir /home/lab18/results/FigMappingQCandVar
+
+This command generates:
+
+  • STAR mapping QC stacked barplots
+  • FeatureCounts sample QC plots (assigned reads, detected genes)
+  • Global PCA (C0, T1, T2)
+  • PCA restricted to T1 vs T2
+  • Sample-to-sample distance heatmap
+
+This represents the recommended exploratory QC workflow
+prior to downstream statistical analysis.
 </pre>
 
 <pre>
@@ -463,19 +552,26 @@ Additional environments
 
 mappingqc_var_env
 
-Used for STAR mapping QC visualization and downstream
-analysis figures.
+Used for mapping QC, featureCounts QC, and exploratory
+transcriptomic analysis (PCA and clustering).
 
 Includes:
 
   Python
   pandas
+
   R
   ggplot2
+  ggbeeswarm
   dplyr
   readr
   tidyr
-  
+
+  pheatmap
+  RColorBrewer
+
+  Bioconductor:
+    DESeq2   (variance stabilizing transformation)  
 If missing, the following packages will be installed automatically
 into the active Conda environment:
 
