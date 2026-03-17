@@ -22,6 +22,12 @@ outdir <- args[[3]]
 
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
+excluded_samples <- c("RFA-64", "RFA-70")
+
+exclude_flagged_samples <- function(x) {
+  x[!x %in% excluded_samples]
+}
+
 extract_sample_id <- function(x) {
   x2 <- ifelse(grepl("/", x, fixed = TRUE), basename(dirname(x)), x)
   sub("^(RFA-[0-9]+).*", "\\1", x2)
@@ -38,19 +44,18 @@ ordered_rfa_levels <- function(x) {
 }
 
 get_condition_palette <- function(conditions) {
+  accent8 <- brewer.pal(8, "Accent")
+  
   base_pal <- c(
-    "C0" = "#4a4a4a",
-    "T1" = "#1e6289",
-    "T2" = "#c31f22"
+    "C0" = accent8[1],
+    "T1" = accent8[2],
+    "T2" = accent8[3]
   )
   
   conds <- unique(as.character(conditions))
   missing <- setdiff(conds, names(base_pal))
   if (length(missing) > 0) {
-    extra_cols <- setNames(
-      colorRampPalette(c("#8ecdcb", "#2f8fb3", "#f4a261", "#7c1718"))(length(missing)),
-      missing
-    )
+    extra_cols <- setNames(accent8[seq_len(length(missing)) + 3], missing)
     base_pal <- c(base_pal, extra_cols)
   }
   
@@ -80,12 +85,16 @@ load_featurecounts_matrix <- function(counts_tsv) {
     )
   }
   
+  keep_samples <- exclude_flagged_samples(colnames(count_matrix))
+  count_matrix <- count_matrix[, keep_samples, drop = FALSE]
+  
   count_matrix
 }
 
 load_metadata <- function(metadata_tsv, sample_names) {
   meta <- read_tsv(metadata_tsv, show_col_types = FALSE) %>%
-    mutate(sample = extract_sample_id(sample))
+    mutate(sample = extract_sample_id(sample)) %>%
+    filter(!sample %in% excluded_samples)
   
   required_cols <- c("sample", "condition")
   missing_cols <- setdiff(required_cols, colnames(meta))
@@ -112,6 +121,13 @@ load_metadata <- function(metadata_tsv, sample_names) {
     filter(sample %in% sample_names) %>%
     mutate(sample = factor(sample, levels = sample_names)) %>%
     arrange(sample)
+  
+  if ("age" %in% colnames(meta)) {
+    meta$age <- as.character(meta$age)
+    meta$age[meta$age == "1"] <- "1 month"
+    meta$age[meta$age == "2"] <- "2 months"
+    meta$age <- factor(meta$age, levels = c("1 month", "2 months"))
+  }
   
   as.data.frame(meta)
 }
@@ -174,7 +190,7 @@ plot_pca_global_and_t1t2 <- function(count_matrix, metadata_df, outdir) {
     metadata_df = metadata_df,
     out_prefix = "pca_global_all_samples",
     outdir = outdir,
-    title_text = "Global PCA"
+    title_text = ""
   )
   
   t1t2_samples <- metadata_df$condition %in% c("T1", "T2")
@@ -191,7 +207,7 @@ plot_pca_global_and_t1t2 <- function(count_matrix, metadata_df, outdir) {
     metadata_df = metadata_t1t2,
     out_prefix = "pca_t1_vs_t2",
     outdir = outdir,
-    title_text = "PCA: T1 vs T2"
+    title_text = ""
   )
 }
 
@@ -207,25 +223,35 @@ plot_sample_distance_heatmap <- function(count_matrix, metadata_df, outdir) {
   rownames(annotation_df) <- annotation_df$sample
   annotation_df$sample <- NULL
   
+  colnames(annotation_df) <- dplyr::recode(
+    colnames(annotation_df),
+    condition = "Condition",
+    age = "Age",
+    temperature = "Temperature"
+  )
+  
   ann_colors <- list()
-  if ("condition" %in% colnames(annotation_df)) {
-    ann_colors$condition <- get_condition_palette(annotation_df$condition)
+  
+  if ("Condition" %in% colnames(annotation_df)) {
+    ann_colors$Condition <- get_condition_palette(annotation_df$Condition)
   }
   
-  if ("age" %in% colnames(annotation_df)) {
-    age_levels <- unique(as.character(annotation_df$age))
-    ann_colors$age <- setNames(
-      colorRampPalette(c("#e5ebf5", "#1e6289"))(length(age_levels)),
-      age_levels
-    )
+  if ("Age" %in% colnames(annotation_df)) {
+    age_levels <- levels(annotation_df$Age)
+    ann_colors$Age <- c(
+      "1 month" = "#b3cde3",
+      "2 months" = "#005b96"
+    )[age_levels]
   }
   
-  if ("temperature" %in% colnames(annotation_df)) {
-    temp_levels <- unique(as.character(annotation_df$temperature))
-    ann_colors$temperature <- setNames(
-      colorRampPalette(c("#8ecdcb", "#c31f22"))(length(temp_levels)),
-      temp_levels
+  if ("Temperature" %in% colnames(annotation_df)) {
+    temp_levels <- unique(as.character(annotation_df$Temperature))
+    temp_palette <- c(
+      "pre" = "#7fc97f",
+      "room" = "#beaed4",
+      "37C" = "#fdc086"
     )
+    ann_colors$Temperature <- temp_palette[temp_levels]
   }
   
   heat_cols <- colorRampPalette(rev(brewer.pal(9, "Blues")))(255)
@@ -246,7 +272,7 @@ plot_sample_distance_heatmap <- function(count_matrix, metadata_df, outdir) {
     annotation_colors = ann_colors,
     fontsize = 9,
     border_color = NA,
-    main = "Sample-to-sample distance heatmap"
+    main = ""
   )
   dev.off()
   
@@ -261,7 +287,7 @@ plot_sample_distance_heatmap <- function(count_matrix, metadata_df, outdir) {
     annotation_colors = ann_colors,
     fontsize = 9,
     border_color = NA,
-    main = "Sample-to-sample distance heatmap"
+    main = ""
   )
   dev.off()
 }
