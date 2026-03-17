@@ -6,6 +6,7 @@ COUNTS_TSV=""
 OUTDIR=""
 ENV_NAME="mappingqc_var_env"
 ENV_FILE="envs/mappingqc_var_env.yml"
+METADATA_TSV=""
 
 usage() {
   cat <<EOF
@@ -16,6 +17,7 @@ Required:
   --star-dir DIR       STAR directory with sample subdirs containing Log.final.out
   --counts-tsv PATH    featureCounts.tsv file
   --outdir DIR         Output directory for parsed tables and plots
+  --metadata-tsv PATH  metadata TSV file
 
 Optional:
   --env-name STR       Conda env name (default: mappingqc_var_env)
@@ -31,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --outdir) OUTDIR="$2"; shift 2 ;;
     --env-name) ENV_NAME="$2"; shift 2 ;;
     --env-file) ENV_FILE="$2"; shift 2 ;;
+    --metadata-tsv) METADATA_TSV="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1" >&2; usage ;;
   esac
@@ -40,6 +43,8 @@ done
 [[ -d "${STAR_DIR}" ]] || { echo "ERROR: STAR directory not found: ${STAR_DIR}" >&2; exit 2; }
 [[ -n "${COUNTS_TSV}" ]] || { echo "ERROR: --counts-tsv is required" >&2; exit 2; }
 [[ -f "${COUNTS_TSV}" ]] || { echo "ERROR: featureCounts file not found: ${COUNTS_TSV}" >&2; exit 2; }
+[[ -n "${METADATA_TSV}" ]] || { echo "ERROR: --metadata-tsv is required" >&2; exit 2; }
+[[ -f "${METADATA_TSV}" ]] || { echo "ERROR: metadata file not found: ${METADATA_TSV}" >&2; exit 2; }
 [[ -n "${OUTDIR}" ]] || { echo "ERROR: --outdir is required" >&2; exit 2; }
 
 find_and_source_conda() {
@@ -98,7 +103,11 @@ create_env_if_needed() {
     r-readr \
     r-dplyr \
     r-tidyr \
-    r-ggplot2
+    r-ggplot2 \
+    r-pheatmap \
+    r-rcolorbrewer \
+    bioconductor-deseq2
+
   st=$?
   set -e
 
@@ -113,7 +122,10 @@ create_env_if_needed() {
       r-readr \
       r-dplyr \
       r-tidyr \
-      r-ggplot2
+      r-ggplot2 \
+      r-pheatmap \
+      r-rcolorbrewer \
+      bioconductor-deseq2
     conda config --set channel_priority strict || true
   fi
 }
@@ -153,6 +165,12 @@ conda run -n "${ENV_NAME}" Rscript workflow/plot_star_mapping_qc.R \
   "${OUTDIR}/star_mapping_qc_summary.tsv" \
   "${OUTDIR}" \
   "${COUNTS_TSV}"
+
+echo ">>> Plotting PCA + sample-distance heatmap"
+conda run -n "${ENV_NAME}" Rscript workflow/plot_pca_distance_qc.R \
+  "${COUNTS_TSV}" \
+  "${METADATA_TSV}" \
+  "${OUTDIR}"
 
 echo ">>> Done."
 echo ">>> Output dir: ${OUTDIR}"
