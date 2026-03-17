@@ -158,8 +158,8 @@ plot_pca_from_vst <- function(vsd, metadata_df, out_prefix, outdir, title_text) 
     scale_color_manual(values = cond_pal) +
     labs(
       title = title_text,
-      x = paste0("PC1 (", round(percent_var[1], 1), "%)"),
-      y = paste0("PC2 (", round(percent_var[2], 1), "%)"),
+      x = paste0("PC1 (", round(percent_var[1], 1), "%)\n"),
+      y = paste0("\nPC2 (", round(percent_var[2], 1), "%)"),
       color = "Condition"
     ) +
     theme_classic(base_size = 11) +
