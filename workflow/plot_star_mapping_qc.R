@@ -26,6 +26,11 @@ exclude_flagged_samples <- function(x) {
   x[!x %in% excluded_samples]
 }
 
+extract_sample_id <- function(x) {
+  x2 <- ifelse(grepl("/", x, fixed = TRUE), basename(dirname(x)), x)
+  sub("^(RFA-[0-9]+).*", "\\1", x2)
+}
+
 sample_dot_palette <- c(
   "#c31f22",
   "#e5ebf5",
