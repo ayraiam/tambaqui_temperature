@@ -20,6 +20,12 @@ counts_tsv <- args[[3]]
 
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
+excluded_samples <- c("RFA-64", "RFA-70")
+
+exclude_flagged_samples <- function(x) {
+  x[!x %in% excluded_samples]
+}
+
 sample_dot_palette <- c(
   "#c31f22",
   "#e5ebf5",
@@ -61,9 +67,8 @@ ordered_rfa_levels <- function(x) {
 
 plot_mapping_qc <- function(summary_tsv, outdir) {
   df <- read_tsv(summary_tsv, show_col_types = FALSE) %>%
-    mutate(
-      sample = sub("^(RFA-[0-9]+).*", "\\1", sample)
-    )
+    mutate(sample = extract_sample_id(sample)) %>%
+    filter(!sample %in% excluded_samples)
   
   sample_levels <- ordered_rfa_levels(df$sample)
   
@@ -223,6 +228,9 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
       paste(unique(colnames(count_matrix)[duplicated(colnames(count_matrix))]), collapse = ", ")
     )
   }
+  
+  keep_samples <- exclude_flagged_samples(colnames(count_matrix))
+  count_matrix <- count_matrix[, keep_samples, drop = FALSE]
   
   library_sizes <- colSums(count_matrix)
   detected_genes <- colSums(count_matrix > 0)
