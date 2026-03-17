@@ -60,6 +60,7 @@ MAPQC_OUTDIR=""
 MAPQC_ENV_NAME="mappingqc_var_env"
 MAPQC_ENV_FILE="envs/mappingqc_var_env.yml"
 MAPQC_COUNTS_TSV=""
+MAPQC_METADATA_TSV=""
 
 usage() {
   cat <<EOF
@@ -117,6 +118,7 @@ Making Mapping QC & variance Partition figure:
     --mapqc-env-name STR   Conda env name for mapping QC plots
     --mapqc-env-file PATH  Conda YAML file for mapping QC plots
     --mapqc-counts-tsv PATH  featureCounts.tsv file for library QC plots
+    --mapqc-metadata-tsv PATH  metadata TSV for PCA and sample-distance heatmap
 
 Notes:
   You can also toggle via environment variables:
@@ -171,6 +173,7 @@ while [[ $# -gt 0 ]]; do
     --mapqc-env-name) MAPQC_ENV_NAME="$2"; shift 2 ;;
     --mapqc-env-file) MAPQC_ENV_FILE="$2"; shift 2 ;;
     --mapqc-counts-tsv) MAPQC_COUNTS_TSV="$2"; shift 2 ;;
+    --mapqc-metadata-tsv) MAPQC_METADATA_TSV="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
@@ -239,6 +242,7 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "MAPQC_ENV_NAME: ${MAPQC_ENV_NAME}"
   echo "MAPQC_ENV_FILE: ${MAPQC_ENV_FILE}"
   echo "MAPQC_COUNTS_TSV: ${MAPQC_COUNTS_TSV}"
+  echo "MAPQC_METADATA_TSV: ${MAPQC_METADATA_TSV}"
   echo "=========================================="
 } > "$INVOCATION_LOG"
 
@@ -330,6 +334,7 @@ if [[ "${RUN_MAPPING_QC_VAR}" -eq 1 ]]; then
   bash workflow/run_mapping_qc_var.sh \
     --star-dir "${MAPQC_STAR_DIR_FINAL}" \
     --counts-tsv "${MAPQC_COUNTS_TSV}" \
+    --metadata-tsv "${MAPQC_METADATA_TSV}" \
     --outdir "${MAPQC_OUTDIR}" \
     --env-name "${MAPQC_ENV_NAME}" \
     --env-file "${MAPQC_ENV_FILE}"
