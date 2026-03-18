@@ -79,50 +79,59 @@ meta <- read_tsv(metadata_tsv, show_col_types = FALSE) %>%
   mutate(sample = extract_sample_id(sample)) %>%
   filter(!sample %in% excluded_samples)
 
-# Match order
+required_cols <- c("sample", "condition")
+missing_cols <- setdiff(required_cols, colnames(meta))
+if (length(missing_cols) > 0) {
+  stop("Metadata file is missing required columns: ", paste(missing_cols, collapse = ", "))
+}
+
+if (anyDuplicated(meta$sample)) {
+  stop(
+    "Duplicate sample IDs found in metadata: ",
+    paste(unique(meta$sample[duplicated(meta$sample)]), collapse = ", ")
+  )
+}
+
+missing_in_meta <- setdiff(colnames(count_matrix), meta$sample)
+if (length(missing_in_meta) > 0) {
+  stop(
+    "These samples are in featureCounts but missing from metadata: ",
+    paste(missing_in_meta, collapse = ", ")
+  )
+}
+
 meta <- meta %>%
   filter(sample %in% colnames(count_matrix)) %>%
-  mutate(sample = factor(sample, levels = colnames(count_matrix))) %>%
-  arrange(sample)
+  mutate(
+    sample = as.character(sample),
+    Condition = factor(condition, levels = c("C0", "T1", "T2"))
+  )
 
-# -----------------------------
-# Build Age and Temperature
-# -----------------------------
-# Expected metadata columns:
-# - condition (C0, T1, T2)
-# - age (1, 2 OR "1 month", "2 months")
-# - temperature (pre, room, 37C)
+meta <- as.data.frame(meta)
+rownames(meta) <- meta$sample
+meta <- meta[colnames(count_matrix), , drop = FALSE]
 
-# Clean Age
-meta$Age <- as.character(meta$age)
-meta$Age[meta$Age == "1"] <- "1 month"
-meta$Age[meta$Age == "2"] <- "2 months"
-meta$Age <- factor(meta$Age, levels = c("1 month", "2 months"))
-
-# Clean Temperature
-meta$Temperature <- as.character(meta$temperature)
-meta$Temperature <- factor(meta$Temperature)
+if (!identical(rownames(meta), colnames(count_matrix))) {
+  stop("Metadata rownames do not match count matrix column names.")
+}
 
 # -----------------------------
 # edgeR + voom
 # -----------------------------
 dge <- DGEList(counts = count_matrix)
 
-# Filter low expression genes
-keep <- filterByExpr(dge)
+keep <- filterByExpr(dge, group = meta$Condition)
 dge <- dge[keep, , keep.lib.sizes = FALSE]
 
 dge <- calcNormFactors(dge)
 
-design <- model.matrix(~ 1, data = meta)
-
+design <- model.matrix(~ Condition, data = meta)
 v <- voom(dge, design, plot = FALSE)
 
 # -----------------------------
 # Variance Partition
 # -----------------------------
-form <- ~ Age + Temperature
-
+form <- ~ Condition
 varPart <- fitExtractVarPartModel(v$E, form, meta)
 
 # -----------------------------
@@ -158,14 +167,13 @@ plot_df <- varpart_df %>%
 
 plot_df$factor <- recode(
   plot_df$factor,
-  Age = "Age",
-  Temperature = "Temperature",
+  Condition = "Condition",
   Residuals = "Residual"
 )
 
 plot_df$factor <- factor(
   plot_df$factor,
-  levels = c("Age", "Temperature", "Residual")
+  levels = c("Condition", "Residual")
 )
 
 # -----------------------------
@@ -175,8 +183,7 @@ p <- ggplot(plot_df, aes(x = factor, y = variance, fill = factor)) +
   geom_violin(trim = FALSE, alpha = 0.7, color = NA) +
   geom_boxplot(width = 0.15, outlier.shape = NA, fill = "white") +
   scale_fill_manual(values = c(
-    "Age" = "#8da0cb",
-    "Temperature" = "#fc8d62",
+    "Condition" = "#8da0cb",
     "Residual" = "#bdbdbd"
   )) +
   labs(
