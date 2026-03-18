@@ -47,8 +47,10 @@ It provides a structured, re-entrant framework for:
   14) Visualization of alignment composition across samples
   15) FeatureCounts-based sample QC (library size + detected genes)
   16) Exploratory transcriptomic QC (PCA + sample-to-sample distance heatmap)
-  17) Automatic dependency detection + installation inside Conda environments
-  18) Full provenance logging        
+  17) Variance partitioning analysis (Age vs Temperature effects)
+  18) Modular execution of QC and statistical steps via CLI flags
+  19) Automatic dependency detection + installation inside Conda environments
+  20) Full provenance logging                
   
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
@@ -84,6 +86,7 @@ STRUCTURE
    parse_star_log_final.py      - STAR log parser
    plot_star_mapping_qc.R       - Mapping QC stacked barplots
    plot_pca_distance_qc.R      - PCA + sample-to-sample distance heatmap
+   plot_variance_partition.R   - Variance partitioning (Age + Temperature)
    make_qc_summary_table.py
 
  /envs/                          - Auto-exported Conda environments
@@ -362,7 +365,71 @@ This stage provides a critical bridge between:
   alignment QC → biological interpretation
 
 and is recommended before differential expression analysis.
-  
+
+Stage 11 — Variance Partitioning Analysis
+
+This stage quantifies the contribution of biological factors to global
+gene expression variance across all samples.
+
+Inputs:
+  results/counts/featureCounts.tsv
+  metadata/sample_metadata.tsv
+
+Model:
+
+  ~ Age + Temperature
+
+Where:
+
+  • Age reflects developmental stage (1 month vs 2 months)
+  • Temperature reflects experimental exposure (pre, room, 37C)
+
+Important design note:
+
+  Temperature effects are evaluated within the same developmental stage
+  (T1 vs T2), as temperature variation is only applied at 2 months.
+
+Method:
+
+  • Counts are normalized using edgeR
+  • Lowly expressed genes are filtered (filterByExpr)
+  • Expression values are transformed using voom (limma)
+  • Variance is decomposed using variancePartition
+
+Outputs:
+
+  results/FigMappingQCandVar/
+      variance_partition_gene_level.tsv
+      variance_partition_summary.tsv
+      variance_partition_violin.pdf/png
+
+Outputs description:
+
+1) Gene-level variance table:
+   Fraction of variance explained per gene for:
+     • Age
+     • Temperature
+     • Residual
+
+2) Summary table:
+   Median variance explained across all genes per factor
+
+3) Visualization:
+   • Violin plot of variance explained distributions
+   • Boxplot overlay for median and dispersion
+
+Interpretation:
+
+  • Age captures global developmental effects
+  • Temperature captures treatment-specific effects among same-age larvae
+  • Residual captures unexplained or gene-specific variability
+
+This stage provides a quantitative complement to PCA and clustering,
+allowing formal decomposition of transcriptomic variance drivers.
+
+Recommended usage:
+
+  Run after exploratory QC and before differential expression analysis.
 </pre>
 
 ---
@@ -428,6 +495,9 @@ Quantification:
   --featurecounts          Run featureCounts using existing STAR BAMs
   --strandness 0|1|2       featureCounts strandedness
 
+Variance Partitioning:
+  --variance-partition     Run variance partitioning (Age + Temperature model)
+  
 Recommended workflow:
   1) Run alignment (--star)
   2) Infer strandedness via RSeQC
@@ -530,6 +600,26 @@ This command generates:
 
 This represents the recommended exploratory QC workflow
 prior to downstream statistical analysis.
+
+# 14) Run variance partitioning only
+
+bash workflow/runall.sh \
+  --no-qc \
+  --variance-partition \
+  --mapqc-counts-tsv results/counts/featureCounts.tsv \
+  --mapqc-metadata-tsv metadata/tambaqui_metadata.tsv
+
+This command generates:
+
+  • Variance partition violin plot
+  • Gene-level variance decomposition table
+  • Summary of variance explained by:
+      - Age (development)
+      - Temperature (treatment)
+      - Residual variation
+
+This analysis quantifies the relative contribution of biological
+factors to global transcriptomic variation.
 </pre>
 
 <pre>
@@ -571,7 +661,11 @@ Includes:
   RColorBrewer
 
   Bioconductor:
-    DESeq2   (variance stabilizing transformation)  
+    DESeq2               (VST for PCA/clustering)
+    limma                (voom transformation)
+    edgeR                (normalization + filtering)
+    variancePartition    (variance decomposition)  
+  
 If missing, the following packages will be installed automatically
 into the active Conda environment:
 
