@@ -27,6 +27,7 @@ RSEQC_ENV_NAME="rseqc_env"
 RSEQC_ENV_FILE="envs/rseqc_env.yml"
 SKIP_RAW_QC=0
 RUN_QC_SUMMARY_ONLY=0
+RUN_VARPART=0
 
 # fastp knobs
 FASTP_QUAL="20"
@@ -84,6 +85,7 @@ General:
   --gene-body-coverage    Run only geneBody_coverage.py
   --rseqc-env-name STR    Conda env name for RSeQC tools (default: rseqc_env)
   --rseqc-env-file PATH   Conda YAML file for RSeQC env
+  --variance-partition    Run variance partition analysis from featureCounts + metadata
 
 Stage control:
   --no-qc                 Skip libsQC
@@ -174,6 +176,7 @@ while [[ $# -gt 0 ]]; do
     --mapqc-env-file) MAPQC_ENV_FILE="$2"; shift 2 ;;
     --mapqc-counts-tsv) MAPQC_COUNTS_TSV="$2"; shift 2 ;;
     --mapqc-metadata-tsv) MAPQC_METADATA_TSV="$2"; shift 2 ;;
+    --variance-partition) RUN_VARPART=1; shift 1 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
@@ -243,6 +246,7 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "MAPQC_ENV_FILE: ${MAPQC_ENV_FILE}"
   echo "MAPQC_COUNTS_TSV: ${MAPQC_COUNTS_TSV}"
   echo "MAPQC_METADATA_TSV: ${MAPQC_METADATA_TSV}"
+  echo "RUN_VARPART: ${RUN_VARPART}"
   echo "=========================================="
 } > "$INVOCATION_LOG"
 
@@ -326,18 +330,24 @@ if [[ "${RUN_STAR_INDEX}" -eq 1 || "${RUN_STAR}" -eq 1 || "${RUN_FEATURECOUNTS}"
 fi
 
 # -------------------
-# STAR mapping QC summary / plotting stage
+# STAR mapping QC / PCA / variance partition stage
 # -------------------
-if [[ "${RUN_MAPPING_QC_VAR}" -eq 1 ]]; then
+if [[ "${RUN_MAPPING_QC_VAR}" -eq 1 || "${RUN_VARPART}" -eq 1 ]]; then
   MAPQC_STAR_DIR_FINAL="${MAPQC_STAR_DIR:-${RESULTS_ABS}/star}"
 
-  bash workflow/run_mapping_qc_var.sh \
-    --star-dir "${MAPQC_STAR_DIR_FINAL}" \
-    --counts-tsv "${MAPQC_COUNTS_TSV}" \
-    --metadata-tsv "${MAPQC_METADATA_TSV}" \
-    --outdir "${MAPQC_OUTDIR}" \
-    --env-name "${MAPQC_ENV_NAME}" \
+  MAPQC_ARGS=(
+    --star-dir "${MAPQC_STAR_DIR_FINAL}"
+    --counts-tsv "${MAPQC_COUNTS_TSV}"
+    --metadata-tsv "${MAPQC_METADATA_TSV}"
+    --outdir "${MAPQC_OUTDIR}"
+    --env-name "${MAPQC_ENV_NAME}"
     --env-file "${MAPQC_ENV_FILE}"
+  )
+
+  [[ "${RUN_MAPPING_QC_VAR}" -eq 1 ]] && MAPQC_ARGS+=( --mapping-qc )
+  [[ "${RUN_VARPART}" -eq 1 ]] && MAPQC_ARGS+=( --variance-partition )
+
+  bash workflow/run_mapping_qc_var.sh "${MAPQC_ARGS[@]}"
 fi
 
 # -------------------
