@@ -7,6 +7,8 @@ OUTDIR=""
 ENV_NAME="mappingqc_var_env"
 ENV_FILE="envs/mappingqc_var_env.yml"
 METADATA_TSV=""
+RUN_MAPPING_QC=0
+RUN_VARPART=0
 
 usage() {
   cat <<EOF
@@ -22,6 +24,8 @@ Required:
 Optional:
   --env-name STR       Conda env name (default: mappingqc_var_env)
   --env-file PATH      YAML file to write/export env snapshot (default: envs/mappingqc_var_env.yml)
+    --mapping-qc           Run STAR mapping QC + PCA + distance heatmap
+    --variance-partition   Run variance partition analysis
 EOF
   exit 0
 }
@@ -34,10 +38,17 @@ while [[ $# -gt 0 ]]; do
     --env-name) ENV_NAME="$2"; shift 2 ;;
     --env-file) ENV_FILE="$2"; shift 2 ;;
     --metadata-tsv) METADATA_TSV="$2"; shift 2 ;;
+    --mapping-qc) RUN_MAPPING_QC=1; shift 1 ;;
+    --variance-partition) RUN_VARPART=1; shift 1 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1" >&2; usage ;;
   esac
 done
+
+# Default behavior: if no action specified, run mapping QC
+if [[ "${RUN_MAPPING_QC}" -eq 0 && "${RUN_VARPART}" -eq 0 ]]; then
+  RUN_MAPPING_QC=1
+fi
 
 [[ -n "${STAR_DIR}" ]] || { echo "ERROR: --star-dir is required" >&2; exit 2; }
 [[ -d "${STAR_DIR}" ]] || { echo "ERROR: STAR directory not found: ${STAR_DIR}" >&2; exit 2; }
@@ -106,7 +117,10 @@ create_env_if_needed() {
     r-ggplot2 \
     r-pheatmap \
     r-rcolorbrewer \
-    bioconductor-deseq2
+    bioconductor-deseq2 \
+    bioconductor-limma \
+    bioconductor-edger \
+    bioconductor-variancepartition
 
   st=$?
   set -e
@@ -125,7 +139,10 @@ create_env_if_needed() {
       r-ggplot2 \
       r-pheatmap \
       r-rcolorbrewer \
-      bioconductor-deseq2
+      bioconductor-deseq2 \
+      bioconductor-limma \
+      bioconductor-edger \
+      bioconductor-variancepartition
     conda config --set channel_priority strict || true
   fi
 }
@@ -140,7 +157,7 @@ check_tools() {
   conda run -n "${ENV_NAME}" python -c "import pandas" >/dev/null 2>&1 \
     || { echo "ERROR: pandas not available in env ${ENV_NAME}" >&2; exit 2; }
 
-  conda run -n "${ENV_NAME}" Rscript -e "library(readr); library(dplyr); library(tidyr); library(ggplot2); library(ggbeeswarm)" >/dev/null 2>&1 \
+  conda run -n "${ENV_NAME}" Rscript -e "library(readr); library(dplyr); library(tidyr); library(ggplot2); library(ggbeeswarm); library(limma); library(edgeR); library(variancePartition)" >/dev/null 2>&1 \
     || { echo "ERROR: required R packages not available in env ${ENV_NAME}" >&2; exit 2; }
 }
 
@@ -155,22 +172,32 @@ check_tools
 
 mkdir -p "${OUTDIR}"
 
-echo ">>> Parsing STAR Log.final.out files"
-conda run -n "${ENV_NAME}" python workflow/parse_star_log_final.py \
-  --star-dir "${STAR_DIR}" \
-  --outdir "${OUTDIR}"
+if [[ "${RUN_MAPPING_QC}" -eq 1 ]]; then
+  echo ">>> Parsing STAR Log.final.out files"
+  conda run -n "${ENV_NAME}" python workflow/parse_star_log_final.py \
+    --star-dir "${STAR_DIR}" \
+    --outdir "${OUTDIR}"
 
-echo ">>> Plotting STAR mapping QC + featureCounts sample QC"
-conda run -n "${ENV_NAME}" Rscript workflow/plot_star_mapping_qc.R \
-  "${OUTDIR}/star_mapping_qc_summary.tsv" \
-  "${OUTDIR}" \
-  "${COUNTS_TSV}"
+  echo ">>> Plotting STAR mapping QC + featureCounts sample QC"
+  conda run -n "${ENV_NAME}" Rscript workflow/plot_star_mapping_qc.R \
+    "${OUTDIR}/star_mapping_qc_summary.tsv" \
+    "${OUTDIR}" \
+    "${COUNTS_TSV}"
 
-echo ">>> Plotting PCA + sample-distance heatmap"
-conda run -n "${ENV_NAME}" Rscript workflow/plot_pca_distance_qc.R \
-  "${COUNTS_TSV}" \
-  "${METADATA_TSV}" \
-  "${OUTDIR}"
+  echo ">>> Plotting PCA + sample-distance heatmap"
+  conda run -n "${ENV_NAME}" Rscript workflow/plot_pca_distance_qc.R \
+    "${COUNTS_TSV}" \
+    "${METADATA_TSV}" \
+    "${OUTDIR}"
+fi
+
+if [[ "${RUN_VARPART}" -eq 1 ]]; then
+  echo ">>> Plotting variance partition"
+  conda run -n "${ENV_NAME}" Rscript workflow/plot_variance_partition.R \
+    "${COUNTS_TSV}" \
+    "${METADATA_TSV}" \
+    "${OUTDIR}"
+fi
 
 echo ">>> Done."
 echo ">>> Output dir: ${OUTDIR}"
