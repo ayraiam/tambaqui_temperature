@@ -50,13 +50,16 @@ if [[ "${RUN_MAPPING_QC}" -eq 0 && "${RUN_VARPART}" -eq 0 ]]; then
   RUN_MAPPING_QC=1
 fi
 
-[[ -n "${STAR_DIR}" ]] || { echo "ERROR: --star-dir is required" >&2; exit 2; }
-[[ -d "${STAR_DIR}" ]] || { echo "ERROR: STAR directory not found: ${STAR_DIR}" >&2; exit 2; }
 [[ -n "${COUNTS_TSV}" ]] || { echo "ERROR: --counts-tsv is required" >&2; exit 2; }
 [[ -f "${COUNTS_TSV}" ]] || { echo "ERROR: featureCounts file not found: ${COUNTS_TSV}" >&2; exit 2; }
 [[ -n "${METADATA_TSV}" ]] || { echo "ERROR: --metadata-tsv is required" >&2; exit 2; }
 [[ -f "${METADATA_TSV}" ]] || { echo "ERROR: metadata file not found: ${METADATA_TSV}" >&2; exit 2; }
 [[ -n "${OUTDIR}" ]] || { echo "ERROR: --outdir is required" >&2; exit 2; }
+
+if [[ "${RUN_MAPPING_QC}" -eq 1 ]]; then
+  [[ -n "${STAR_DIR}" ]] || { echo "ERROR: --star-dir is required for --mapping-qc" >&2; exit 2; }
+  [[ -d "${STAR_DIR}" ]] || { echo "ERROR: STAR directory not found: ${STAR_DIR}" >&2; exit 2; }
+fi
 
 find_and_source_conda() {
   if command -v conda >/dev/null 2>&1; then
