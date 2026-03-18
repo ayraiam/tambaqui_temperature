@@ -22,7 +22,7 @@ outdir <- args[[3]]
 
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
-excluded_samples <- c("RFA-64", "RFA-70")
+excluded_samples <- c("RFA-64", "RFA-70", "RFA-74")
 
 exclude_flagged_samples <- function(x) {
   x[!x %in% excluded_samples]
@@ -44,18 +44,17 @@ ordered_rfa_levels <- function(x) {
 }
 
 get_condition_palette <- function(conditions) {
-  accent8 <- brewer.pal(8, "Accent")
-  
   base_pal <- c(
-    "C0" = accent8[1],
-    "T1" = accent8[2],
-    "T2" = accent8[3]
+    "T1" = "darkmagenta",
+    "C0" = "olivedrab",
+    "T2" = "goldenrod2"
   )
   
   conds <- unique(as.character(conditions))
   missing <- setdiff(conds, names(base_pal))
+  
   if (length(missing) > 0) {
-    extra_cols <- setNames(accent8[seq_len(length(missing)) + 3], missing)
+    extra_cols <- setNames(RColorBrewer::brewer.pal(length(missing), "Set2"), missing)
     base_pal <- c(base_pal, extra_cols)
   }
   
@@ -239,8 +238,8 @@ plot_sample_distance_heatmap <- function(count_matrix, metadata_df, outdir) {
   if ("Age" %in% colnames(annotation_df)) {
     age_levels <- levels(annotation_df$Age)
     ann_colors$Age <- c(
-      "1 month" = "#b3cde3",
-      "2 months" = "#005b96"
+      "1 month" = "#F0027F",
+      "2 months" = "#FFFF99"
     )[age_levels]
   }
   
