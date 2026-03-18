@@ -184,7 +184,7 @@ p <- ggplot(plot_df, aes(x = factor, y = variance, fill = factor)) +
   geom_boxplot(width = 0.15, outlier.shape = NA, fill = "white") +
   scale_fill_manual(values = c(
     "Condition" = "grey", #"#8da0cb"
-    "Residual" = "grey",#"#bdbdbd"
+    "Residual" = "grey"#"#bdbdbd"
   )) +
   labs(
     title = "",
