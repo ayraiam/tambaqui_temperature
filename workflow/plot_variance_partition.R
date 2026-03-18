@@ -180,11 +180,11 @@ plot_df$factor <- factor(
 # Plot (violin + boxplot)
 # -----------------------------
 p <- ggplot(plot_df, aes(x = factor, y = variance, fill = factor)) +
-  geom_violin(trim = FALSE, alpha = 0.7, color = NA) +
+  geom_violin(trim = FALSE, alpha = 0.5, color = NA) +
   geom_boxplot(width = 0.15, outlier.shape = NA, fill = "white") +
   scale_fill_manual(values = c(
-    "Condition" = "#8da0cb",
-    "Residual" = "#bdbdbd"
+    "Condition" = "grey", #"#8da0cb"
+    "Residual" = "grey",#"#bdbdbd"
   )) +
   labs(
     title = "",
@@ -206,7 +206,7 @@ ggsave(
 ggsave(
   file.path(outdir, "variance_partition_violin.png"),
   p,
-  width = 5,
+  width = 2.5,
   height = 5,
   dpi = 300
 )
