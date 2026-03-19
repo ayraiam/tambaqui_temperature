@@ -26,8 +26,8 @@
 <pre>
 ABOUT
 -----
-libsQC_illumina is a lightweight, reproducible, Conda-native pipeline for
-Illumina short-read sequencing analysis (RNA-seq or DNA-seq).
+Tambaqui_temperature is a reproducible, Conda-native RNA-seq pipeline
+for transcriptomic analysis of temperature effects during tambaqui development.
 
 It provides a structured, re-entrant framework for:
 
@@ -50,7 +50,9 @@ It provides a structured, re-entrant framework for:
   17) Variance partitioning analysis (Age vs Temperature effects)
   18) Modular execution of QC and statistical steps via CLI flags
   19) Automatic dependency detection + installation inside Conda environments
-  20) Full provenance logging                
+  20) Full provenance logging
+  21) Differential gene expression analysis using DESeq2
+  22) Statistical-first reporting without arbitrary log2FC thresholds
   
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
@@ -88,6 +90,8 @@ STRUCTURE
    plot_pca_distance_qc.R      - PCA + sample-to-sample distance heatmap
    plot_variance_partition.R   - Variance partitioning (Age + Temperature)
    make_qc_summary_table.py
+   run_deseq2.sh
+   run_deseq2_analysis.R
 
  /envs/                          - Auto-exported Conda environments
  /logs/                          - Timestamped stdout/stderr logs
@@ -111,6 +115,8 @@ STRUCTURE
    counts/
    rseqc/
    FigMappingQCandVar/          - STAR mapping QC tables + plots
+  deseq2/
+    
 
  README.md
  LICENSE
@@ -140,6 +146,8 @@ DESIGN PRINCIPLES
  - Alignment QC via samtools
  - Gene quantification via featureCounts
  - Safe re-entry (existing BAMs skipped)
+ - Statistical significance prioritized over arbitrary fold-change thresholds
+ - Full result tables retained for downstream interpretation
 </pre>
 
 ---
@@ -430,6 +438,73 @@ allowing formal decomposition of transcriptomic variance drivers.
 Recommended usage:
 
   Run after exploratory QC and before differential expression analysis.
+
+Stage 12 — Differential Gene Expression (DESeq2)
+
+This stage performs statistical analysis of gene expression differences
+between experimental conditions using DESeq2.
+
+Inputs:
+  results/counts/featureCounts.tsv
+  metadata/sample_metadata.tsv
+
+Key features:
+
+  • Gene-level filtering based on expression:
+      - Minimum count threshold (default: 10)
+      - Minimum number of samples (default: 3)
+
+  • Flexible experimental design via formula interface:
+      ~ Condition
+
+  • Subsetting of samples for pairwise comparisons:
+      (e.g., T1 vs T2, C0 vs T1)
+
+  • Proper factor releveling for contrast specification
+
+  • Wald test for differential expression
+
+  • Multiple testing correction:
+      Benjamini–Hochberg (FDR)
+
+Outputs:
+
+  results/deseq2/<comparison>/
+
+      *_all_genes.tsv
+          Full results table including:
+            baseMean
+            log2FoldChange
+            lfcSE
+            stat
+            pvalue
+            padj
+
+      *_significant_genes.tsv
+          Genes with:
+            padj ≤ alpha (default: 0.05)
+
+      *_ma_plot.pdf/png
+      *_volcano_plot.pdf/png
+
+Important methodological note:
+
+  No arbitrary log2 fold-change cutoff is applied.
+
+  All genes are retained in the output tables, allowing:
+
+    • unbiased statistical interpretation
+    • downstream effect size filtering if needed
+    • full transparency of results
+
+Recommended contrasts:
+
+  • T1 vs C0 → developmental effect
+  • T2 vs T1 → temperature effect (same age)
+  • T2 vs C0 → combined effect
+
+This stage represents the primary statistical analysis
+of the transcriptomic response.
 </pre>
 
 ---
@@ -497,12 +572,23 @@ Quantification:
 
 Variance Partitioning:
   --variance-partition     Run variance partitioning (Age + Temperature model)
-  
-Recommended workflow:
-  1) Run alignment (--star)
-  2) Infer strandedness via RSeQC
-  3) Run featureCounts with the correct -s value
-  
+
+DESeq2:
+  --deseq2                    Run differential expression analysis
+  --deseq2-counts-tsv PATH   featureCounts output
+  --deseq2-metadata-tsv PATH Metadata file
+  --deseq2-outdir PATH       Output directory
+  --deseq2-design STR        Design formula (default: ~ Condition)
+  --deseq2-subset-column STR
+  --deseq2-subset-values STR
+  --deseq2-reference-variable STR
+  --deseq2-reference-level STR
+  --deseq2-contrast-variable STR
+  --deseq2-contrast-numerator STR
+  --deseq2-contrast-denominator STR
+  --deseq2-alpha FLOAT
+  --deseq2-min-count INT
+  --deseq2-min-samples INT  
 </pre>
 
 ---
@@ -620,6 +706,23 @@ This command generates:
 
 This analysis quantifies the relative contribution of biological
 factors to global transcriptomic variation.
+
+# 15) Run differential expression (T2 vs T1)
+
+bash workflow/runall.sh \
+  --no-qc \
+  --deseq2 \
+  --deseq2-counts-tsv results/counts/featureCounts.tsv \
+  --deseq2-metadata-tsv metadata/sample_metadata.tsv \
+  --deseq2-outdir results/deseq2/T2_vs_T1 \
+  --deseq2-design "~ Condition" \
+  --deseq2-subset-column Condition \
+  --deseq2-subset-values T1,T2 \
+  --deseq2-reference-variable Condition \
+  --deseq2-reference-level T1 \
+  --deseq2-contrast-variable Condition \
+  --deseq2-contrast-numerator T2 \
+  --deseq2-contrast-denominator T1
 </pre>
 
 <pre>
@@ -665,6 +768,7 @@ Includes:
     limma                (voom transformation)
     edgeR                (normalization + filtering)
     variancePartition    (variance decomposition)  
+    apeglm (optional for shrinkage)
   
 If missing, the following packages will be installed automatically
 into the active Conda environment:
