@@ -22,13 +22,18 @@ ensure_dir <- function(path) {
 }
 
 clean_sample_names <- function(x) {
-  x |>
-    basename() |>
-    str_replace("\\.bam$", "") |>
-    str_replace("\\.sortedByCoord\\.out$", "") |>
-    str_replace("\\.Aligned$", "") |>
-    str_replace("\\.txt$", "") |>
-    str_replace("\\.tsv$", "")
+  x <- as.character(x)
+  
+  x <- ifelse(
+    grepl("Aligned.sortedByCoord.out.bam$", x),
+    basename(dirname(x)),
+    basename(x)
+  )
+  
+  x_short <- stringr::str_extract(x, "^RFA-[0-9]+")
+  x <- ifelse(!is.na(x_short), x_short, x)
+  
+  x
 }
 
 parse_csv_arg <- function(x) {
@@ -350,14 +355,26 @@ extract_deseq_results <- function(dds,
   shrink_ok <- requireNamespace("apeglm", quietly = TRUE)
   
   if (shrink_ok) {
-    res_shrunk <- lfcShrink(
-      dds,
-      contrast = contrast_vec,
-      res = res,
-      type = "apeglm"
-    )
+    rn <- resultsNames(dds)
+    message2(">>> Available DESeq2 coefficients: ", paste(rn, collapse = ", "))
+    
+    coef_pattern <- paste0("^", contrast_variable, "_", contrast_numerator, "_vs_", contrast_denominator, "$")
+    coef_name <- rn[grepl(coef_pattern, rn)]
+    
+    if (length(coef_name) == 1) {
+      message2(">>> Applying apeglm shrinkage using coef: ", coef_name)
+      res_shrunk <- lfcShrink(
+        dds,
+        coef = coef_name,
+        res = res,
+        type = "apeglm"
+      )
+    } else {
+      message2(">>> Could not match a unique coefficient for apeglm shrinkage; returning unshrunk results")
+      res_shrunk <- res
+    }
   } else {
-    message2(">>> apeglm not available; returning unshrunk log2FC")
+    message2(">>> apeglm not available; returning unshrunk results")
     res_shrunk <- res
   }
   
@@ -521,10 +538,10 @@ main <- function() {
     outdir = args$outdir
   )
   
+  dds <- run_deseq_model(dds)
+  
   vsd <- run_vst_transform(dds, blind = args$vst_blind)
   save_transformed_and_normalized_counts(dds, vsd, args$outdir)
-  
-  dds <- run_deseq_model(dds)
   
   res_df <- extract_deseq_results(
     dds = dds,
