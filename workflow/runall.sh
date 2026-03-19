@@ -28,6 +28,34 @@ RSEQC_ENV_FILE="envs/rseqc_env.yml"
 SKIP_RAW_QC=0
 RUN_QC_SUMMARY_ONLY=0
 RUN_VARPART=0
+RUN_DESEQ2=0
+DESEQ2_COUNTS_TSV=""
+DESEQ2_METADATA_TSV=""
+DESEQ2_OUTDIR=""
+DESEQ2_ENV_NAME="deseq2_downstream_env"
+DESEQ2_ENV_FILE="envs/deseq2_downstream_env.yml"
+
+DESEQ2_SAMPLE_COL="sample"
+DESEQ2_DESIGN="~ Condition"
+
+DESEQ2_SUBSET_COLUMN=""
+DESEQ2_SUBSET_VALUES=""
+
+DESEQ2_REFERENCE_VARIABLE=""
+DESEQ2_REFERENCE_LEVEL=""
+
+DESEQ2_CONTRAST_VARIABLE=""
+DESEQ2_CONTRAST_NUMERATOR=""
+DESEQ2_CONTRAST_DENOMINATOR=""
+
+DESEQ2_ALPHA="0.05"
+DESEQ2_LFC_THRESHOLD="1"
+DESEQ2_MIN_COUNT="10"
+DESEQ2_MIN_SAMPLES="3"
+
+DESEQ2_ANNOTATION_TSV=""
+DESEQ2_ANNOTATION_ID_COL="Geneid"
+DESEQ2_ANNOTATION_NAME_COL="GeneName"
 
 # fastp knobs
 FASTP_QUAL="20"
@@ -122,6 +150,30 @@ Making Mapping QC & variance Partition figure:
     --mapqc-counts-tsv PATH  featureCounts.tsv file for library QC plots
     --mapqc-metadata-tsv PATH  metadata TSV for PCA and sample-distance heatmap
 
+DESeq2 differential expression:
+    --deseq2                    Run DESeq2 differential expression
+    --deseq2-counts-tsv PATH    featureCounts.tsv file
+    --deseq2-metadata-tsv PATH  metadata TSV file
+    --deseq2-outdir DIR         output directory
+    --deseq2-env-name STR       conda env name for DESeq2 stage
+    --deseq2-env-file PATH      env YAML snapshot file
+
+    --deseq2-sample-col STR         sample column in metadata
+    --deseq2-design STR             design formula, e.g. "~ Condition"
+    --deseq2-subset-column STR      metadata column used for subsetting
+    --deseq2-subset-values STR      comma-separated values to keep
+    --deseq2-reference-variable STR variable to relevel
+    --deseq2-reference-level STR    reference level
+    --deseq2-contrast-variable STR  contrast variable
+    --deseq2-contrast-numerator STR contrast numerator
+    --deseq2-contrast-denominator STR contrast denominator
+    --deseq2-alpha FLOAT            adjusted p-value cutoff
+    --deseq2-lfc-threshold FLOAT    abs(log2FC cutoff)
+    --deseq2-min-count INT          min count threshold
+    --deseq2-min-samples INT        min samples passing min count
+    --deseq2-annotation-tsv PATH    optional annotation TSV
+    --deseq2-annotation-id-col STR  annotation gene ID column
+    --deseq2-annotation-name-col STR annotation gene name column
 Notes:
   You can also toggle via environment variables:
     FASTP_TRIM_POLYG=0|1
@@ -177,6 +229,34 @@ while [[ $# -gt 0 ]]; do
     --mapqc-counts-tsv) MAPQC_COUNTS_TSV="$2"; shift 2 ;;
     --mapqc-metadata-tsv) MAPQC_METADATA_TSV="$2"; shift 2 ;;
     --variance-partition) RUN_VARPART=1; shift 1 ;;
+		--deseq2) RUN_DESEQ2=1; shift 1 ;;
+    --deseq2-counts-tsv) DESEQ2_COUNTS_TSV="$2"; shift 2 ;;
+    --deseq2-metadata-tsv) DESEQ2_METADATA_TSV="$2"; shift 2 ;;
+    --deseq2-outdir) DESEQ2_OUTDIR="$2"; shift 2 ;;
+    --deseq2-env-name) DESEQ2_ENV_NAME="$2"; shift 2 ;;
+    --deseq2-env-file) DESEQ2_ENV_FILE="$2"; shift 2 ;;
+
+    --deseq2-sample-col) DESEQ2_SAMPLE_COL="$2"; shift 2 ;;
+    --deseq2-design) DESEQ2_DESIGN="$2"; shift 2 ;;
+
+    --deseq2-subset-column) DESEQ2_SUBSET_COLUMN="$2"; shift 2 ;;
+    --deseq2-subset-values) DESEQ2_SUBSET_VALUES="$2"; shift 2 ;;
+
+    --deseq2-reference-variable) DESEQ2_REFERENCE_VARIABLE="$2"; shift 2 ;;
+    --deseq2-reference-level) DESEQ2_REFERENCE_LEVEL="$2"; shift 2 ;;
+
+    --deseq2-contrast-variable) DESEQ2_CONTRAST_VARIABLE="$2"; shift 2 ;;
+    --deseq2-contrast-numerator) DESEQ2_CONTRAST_NUMERATOR="$2"; shift 2 ;;
+    --deseq2-contrast-denominator) DESEQ2_CONTRAST_DENOMINATOR="$2"; shift 2 ;;
+
+    --deseq2-alpha) DESEQ2_ALPHA="$2"; shift 2 ;;
+    --deseq2-lfc-threshold) DESEQ2_LFC_THRESHOLD="$2"; shift 2 ;;
+    --deseq2-min-count) DESEQ2_MIN_COUNT="$2"; shift 2 ;;
+    --deseq2-min-samples) DESEQ2_MIN_SAMPLES="$2"; shift 2 ;;
+
+    --deseq2-annotation-tsv) DESEQ2_ANNOTATION_TSV="$2"; shift 2 ;;
+    --deseq2-annotation-id-col) DESEQ2_ANNOTATION_ID_COL="$2"; shift 2 ;;
+    --deseq2-annotation-name-col) DESEQ2_ANNOTATION_NAME_COL="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
@@ -201,6 +281,19 @@ if [[ -z "${MAPQC_COUNTS_TSV}" ]]; then
   else
     MAPQC_COUNTS_TSV="${RESULTS_ABS}/counts/featureCounts.tsv"
   fi
+fi
+
+# Resolve default featureCounts file for DESeq2
+if [[ -z "${DESEQ2_COUNTS_TSV}" ]]; then
+  if [[ -n "${COUNTS_DIR}" ]]; then
+    DESEQ2_COUNTS_TSV="${COUNTS_DIR}/featureCounts.tsv"
+  else
+    DESEQ2_COUNTS_TSV="${RESULTS_ABS}/counts/featureCounts.tsv"
+  fi
+fi
+
+if [[ -z "${DESEQ2_OUTDIR}" ]]; then
+  DESEQ2_OUTDIR="${RESULTS_ABS}/deseq2"
 fi
 
 mkdir -p logs metadata
@@ -247,6 +340,28 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "MAPQC_COUNTS_TSV: ${MAPQC_COUNTS_TSV}"
   echo "MAPQC_METADATA_TSV: ${MAPQC_METADATA_TSV}"
   echo "RUN_VARPART: ${RUN_VARPART}"
+	echo "RUN_DESEQ2: ${RUN_DESEQ2}"
+  echo "DESEQ2_COUNTS_TSV: ${DESEQ2_COUNTS_TSV}"
+  echo "DESEQ2_METADATA_TSV: ${DESEQ2_METADATA_TSV}"
+  echo "DESEQ2_OUTDIR: ${DESEQ2_OUTDIR}"
+  echo "DESEQ2_ENV_NAME: ${DESEQ2_ENV_NAME}"
+  echo "DESEQ2_ENV_FILE: ${DESEQ2_ENV_FILE}"
+  echo "DESEQ2_SAMPLE_COL: ${DESEQ2_SAMPLE_COL}"
+  echo "DESEQ2_DESIGN: ${DESEQ2_DESIGN}"
+  echo "DESEQ2_SUBSET_COLUMN: ${DESEQ2_SUBSET_COLUMN}"
+  echo "DESEQ2_SUBSET_VALUES: ${DESEQ2_SUBSET_VALUES}"
+  echo "DESEQ2_REFERENCE_VARIABLE: ${DESEQ2_REFERENCE_VARIABLE}"
+  echo "DESEQ2_REFERENCE_LEVEL: ${DESEQ2_REFERENCE_LEVEL}"
+  echo "DESEQ2_CONTRAST_VARIABLE: ${DESEQ2_CONTRAST_VARIABLE}"
+  echo "DESEQ2_CONTRAST_NUMERATOR: ${DESEQ2_CONTRAST_NUMERATOR}"
+  echo "DESEQ2_CONTRAST_DENOMINATOR: ${DESEQ2_CONTRAST_DENOMINATOR}"
+  echo "DESEQ2_ALPHA: ${DESEQ2_ALPHA}"
+  echo "DESEQ2_LFC_THRESHOLD: ${DESEQ2_LFC_THRESHOLD}"
+  echo "DESEQ2_MIN_COUNT: ${DESEQ2_MIN_COUNT}"
+  echo "DESEQ2_MIN_SAMPLES: ${DESEQ2_MIN_SAMPLES}"
+  echo "DESEQ2_ANNOTATION_TSV: ${DESEQ2_ANNOTATION_TSV}"
+  echo "DESEQ2_ANNOTATION_ID_COL: ${DESEQ2_ANNOTATION_ID_COL}"
+  echo "DESEQ2_ANNOTATION_NAME_COL: ${DESEQ2_ANNOTATION_NAME_COL}"
   echo "=========================================="
 } > "$INVOCATION_LOG"
 
@@ -348,6 +463,40 @@ if [[ "${RUN_MAPPING_QC_VAR}" -eq 1 || "${RUN_VARPART}" -eq 1 ]]; then
   [[ "${RUN_VARPART}" -eq 1 ]] && MAPQC_ARGS+=( --variance-partition )
 
   bash workflow/run_mapping_qc_var.sh "${MAPQC_ARGS[@]}"
+fi
+
+# -------------------
+# DESeq2 differential expression stage
+# -------------------
+if [[ "${RUN_DESEQ2}" -eq 1 ]]; then
+  DESEQ2_ARGS=(
+    --counts-tsv "${DESEQ2_COUNTS_TSV}"
+    --metadata-tsv "${DESEQ2_METADATA_TSV}"
+    --outdir "${DESEQ2_OUTDIR}"
+    --env-name "${DESEQ2_ENV_NAME}"
+    --env-file "${DESEQ2_ENV_FILE}"
+    --sample-col "${DESEQ2_SAMPLE_COL}"
+    --design "${DESEQ2_DESIGN}"
+    --contrast-variable "${DESEQ2_CONTRAST_VARIABLE}"
+    --contrast-numerator "${DESEQ2_CONTRAST_NUMERATOR}"
+    --contrast-denominator "${DESEQ2_CONTRAST_DENOMINATOR}"
+    --alpha "${DESEQ2_ALPHA}"
+    --lfc-threshold "${DESEQ2_LFC_THRESHOLD}"
+    --min-count "${DESEQ2_MIN_COUNT}"
+    --min-samples "${DESEQ2_MIN_SAMPLES}"
+  )
+
+  [[ -n "${DESEQ2_SUBSET_COLUMN}" ]] && DESEQ2_ARGS+=( --subset-column "${DESEQ2_SUBSET_COLUMN}" )
+  [[ -n "${DESEQ2_SUBSET_VALUES}" ]] && DESEQ2_ARGS+=( --subset-values "${DESEQ2_SUBSET_VALUES}" )
+
+  [[ -n "${DESEQ2_REFERENCE_VARIABLE}" ]] && DESEQ2_ARGS+=( --reference-variable "${DESEQ2_REFERENCE_VARIABLE}" )
+  [[ -n "${DESEQ2_REFERENCE_LEVEL}" ]] && DESEQ2_ARGS+=( --reference-level "${DESEQ2_REFERENCE_LEVEL}" )
+
+  [[ -n "${DESEQ2_ANNOTATION_TSV}" ]] && DESEQ2_ARGS+=( --annotation-tsv "${DESEQ2_ANNOTATION_TSV}" )
+  [[ -n "${DESEQ2_ANNOTATION_ID_COL}" ]] && DESEQ2_ARGS+=( --annotation-id-col "${DESEQ2_ANNOTATION_ID_COL}" )
+  [[ -n "${DESEQ2_ANNOTATION_NAME_COL}" ]] && DESEQ2_ARGS+=( --annotation-name-col "${DESEQ2_ANNOTATION_NAME_COL}" )
+
+  bash workflow/run_deseq2.sh "${DESEQ2_ARGS[@]}"
 fi
 
 # -------------------
