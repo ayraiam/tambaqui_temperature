@@ -45,6 +45,12 @@ save_plot <- function(plot_obj, filename, width = 8, height = 6) {
   ggsave(filename, plot = plot_obj, width = width, height = height, dpi = 300)
 }
 
+excluded_samples <- c("RFA-64", "RFA-70", "RFA-74")
+
+exclude_flagged_samples <- function(x) {
+  x[!x %in% excluded_samples]
+}
+
 # ==========================================================
 # Argument parsing
 # ==========================================================
@@ -144,6 +150,16 @@ read_featurecounts <- function(counts_tsv) {
   rownames(counts_mat) <- fc$Geneid
   colnames(counts_mat) <- clean_sample_names(colnames(counts_mat))
   
+  keep_samples <- exclude_flagged_samples(colnames(counts_mat))
+  counts_mat <- counts_mat[, keep_samples, drop = FALSE]
+  
+  message2(">>> Excluding flagged samples: ", paste(excluded_samples, collapse = ", "))
+  message2(">>> Samples retained (counts): ", ncol(counts_mat))
+  
+  if (length(removed_samples) > 0) {
+    message2(">>> Samples removed (counts): ", paste(removed_samples, collapse = ", "))
+  }
+  
   gene_info <- fc |>
     dplyr::select(all_of(required_cols))
   
@@ -165,6 +181,11 @@ read_metadata_table <- function(metadata_tsv, sample_col) {
   meta[[sample_col]] <- clean_sample_names(meta[[sample_col]])
   meta <- meta |>
     distinct(.data[[sample_col]], .keep_all = TRUE)
+  
+  meta <- meta |>
+    filter(.data[[sample_col]] %in% exclude_flagged_samples(.data[[sample_col]]))
+  message2(">>> Excluding flagged samples: ", paste(excluded_samples, collapse = ", "))
+  message2(">>> Samples retained (metadata): ", nrow(meta))
   
   meta
 }
