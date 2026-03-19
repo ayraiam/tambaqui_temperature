@@ -465,6 +465,10 @@ fi
 # DESeq2 differential expression stage
 # -------------------
 if [[ "${RUN_DESEQ2}" -eq 1 ]]; then
+  DESEQ2_TS="$(date +%Y%m%d_%H%M%S)"
+  DESEQ2_OUT_LOG="logs/deseq2_${DESEQ2_TS}.out"
+  DESEQ2_ERR_LOG="logs/deseq2_${DESEQ2_TS}.err"
+
   DESEQ2_ARGS=(
     --counts-tsv "${DESEQ2_COUNTS_TSV}"
     --metadata-tsv "${DESEQ2_METADATA_TSV}"
@@ -483,15 +487,18 @@ if [[ "${RUN_DESEQ2}" -eq 1 ]]; then
 
   [[ -n "${DESEQ2_SUBSET_COLUMN}" ]] && DESEQ2_ARGS+=( --subset-column "${DESEQ2_SUBSET_COLUMN}" )
   [[ -n "${DESEQ2_SUBSET_VALUES}" ]] && DESEQ2_ARGS+=( --subset-values "${DESEQ2_SUBSET_VALUES}" )
-
   [[ -n "${DESEQ2_REFERENCE_VARIABLE}" ]] && DESEQ2_ARGS+=( --reference-variable "${DESEQ2_REFERENCE_VARIABLE}" )
   [[ -n "${DESEQ2_REFERENCE_LEVEL}" ]] && DESEQ2_ARGS+=( --reference-level "${DESEQ2_REFERENCE_LEVEL}" )
-
   [[ -n "${DESEQ2_ANNOTATION_TSV}" ]] && DESEQ2_ARGS+=( --annotation-tsv "${DESEQ2_ANNOTATION_TSV}" )
   [[ -n "${DESEQ2_ANNOTATION_ID_COL}" ]] && DESEQ2_ARGS+=( --annotation-id-col "${DESEQ2_ANNOTATION_ID_COL}" )
   [[ -n "${DESEQ2_ANNOTATION_NAME_COL}" ]] && DESEQ2_ARGS+=( --annotation-name-col "${DESEQ2_ANNOTATION_NAME_COL}" )
 
-  bash workflow/run_deseq2.sh "${DESEQ2_ARGS[@]}"
+  echo ">>> Running DESeq2 stage"
+  bash workflow/run_deseq2.sh "${DESEQ2_ARGS[@]}" \
+    1> >(tee -a "${DESEQ2_OUT_LOG}") \
+    2> >(tee -a "${DESEQ2_ERR_LOG}" >&2)
+
+  echo ">>> DESeq2 logs: ${DESEQ2_OUT_LOG} / ${DESEQ2_ERR_LOG}"
 fi
 
 # -------------------
