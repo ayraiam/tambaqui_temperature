@@ -49,7 +49,6 @@ DESEQ2_CONTRAST_NUMERATOR=""
 DESEQ2_CONTRAST_DENOMINATOR=""
 
 DESEQ2_ALPHA="0.05"
-DESEQ2_LFC_THRESHOLD="1"
 DESEQ2_MIN_COUNT="10"
 DESEQ2_MIN_SAMPLES="3"
 
@@ -168,7 +167,6 @@ DESeq2 differential expression:
     --deseq2-contrast-numerator STR contrast numerator
     --deseq2-contrast-denominator STR contrast denominator
     --deseq2-alpha FLOAT            adjusted p-value cutoff
-    --deseq2-lfc-threshold FLOAT    abs(log2FC cutoff)
     --deseq2-min-count INT          min count threshold
     --deseq2-min-samples INT        min samples passing min count
     --deseq2-annotation-tsv PATH    optional annotation TSV
@@ -250,7 +248,6 @@ while [[ $# -gt 0 ]]; do
     --deseq2-contrast-denominator) DESEQ2_CONTRAST_DENOMINATOR="$2"; shift 2 ;;
 
     --deseq2-alpha) DESEQ2_ALPHA="$2"; shift 2 ;;
-    --deseq2-lfc-threshold) DESEQ2_LFC_THRESHOLD="$2"; shift 2 ;;
     --deseq2-min-count) DESEQ2_MIN_COUNT="$2"; shift 2 ;;
     --deseq2-min-samples) DESEQ2_MIN_SAMPLES="$2"; shift 2 ;;
 
@@ -356,7 +353,6 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "DESEQ2_CONTRAST_NUMERATOR: ${DESEQ2_CONTRAST_NUMERATOR}"
   echo "DESEQ2_CONTRAST_DENOMINATOR: ${DESEQ2_CONTRAST_DENOMINATOR}"
   echo "DESEQ2_ALPHA: ${DESEQ2_ALPHA}"
-  echo "DESEQ2_LFC_THRESHOLD: ${DESEQ2_LFC_THRESHOLD}"
   echo "DESEQ2_MIN_COUNT: ${DESEQ2_MIN_COUNT}"
   echo "DESEQ2_MIN_SAMPLES: ${DESEQ2_MIN_SAMPLES}"
   echo "DESEQ2_ANNOTATION_TSV: ${DESEQ2_ANNOTATION_TSV}"
@@ -481,7 +477,6 @@ if [[ "${RUN_DESEQ2}" -eq 1 ]]; then
     --contrast-numerator "${DESEQ2_CONTRAST_NUMERATOR}"
     --contrast-denominator "${DESEQ2_CONTRAST_DENOMINATOR}"
     --alpha "${DESEQ2_ALPHA}"
-    --lfc-threshold "${DESEQ2_LFC_THRESHOLD}"
     --min-count "${DESEQ2_MIN_COUNT}"
     --min-samples "${DESEQ2_MIN_SAMPLES}"
   )
