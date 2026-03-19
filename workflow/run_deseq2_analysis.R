@@ -108,7 +108,6 @@ get_args <- function() {
   
   parser <- OptionParser(option_list = option_list)
   args <- parse_args(parser)
-  print(args)
   
   required <- c("counts_tsv", "metadata_tsv", "outdir")
   missing_required <- required[vapply(required, function(x) is.null(args[[x]]), logical(1))]
@@ -150,7 +149,10 @@ read_featurecounts <- function(counts_tsv) {
   rownames(counts_mat) <- fc$Geneid
   colnames(counts_mat) <- clean_sample_names(colnames(counts_mat))
   
-  keep_samples <- exclude_flagged_samples(colnames(counts_mat))
+  original_samples <- colnames(counts_mat)
+  keep_samples <- exclude_flagged_samples(original_samples)
+  removed_samples <- setdiff(original_samples, keep_samples)
+  
   counts_mat <- counts_mat[, keep_samples, drop = FALSE]
   
   message2(">>> Excluding flagged samples: ", paste(excluded_samples, collapse = ", "))
@@ -182,10 +184,19 @@ read_metadata_table <- function(metadata_tsv, sample_col) {
   meta <- meta |>
     distinct(.data[[sample_col]], .keep_all = TRUE)
   
+  original_samples <- meta[[sample_col]]
+  
   meta <- meta |>
     filter(.data[[sample_col]] %in% exclude_flagged_samples(.data[[sample_col]]))
+  
+  removed_samples <- setdiff(original_samples, meta[[sample_col]])
+  
   message2(">>> Excluding flagged samples: ", paste(excluded_samples, collapse = ", "))
   message2(">>> Samples retained (metadata): ", nrow(meta))
+  
+  if (length(removed_samples) > 0) {
+    message2(">>> Samples removed (metadata): ", paste(removed_samples, collapse = ", "))
+  }
   
   meta
 }
