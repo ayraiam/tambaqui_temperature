@@ -21,7 +21,6 @@ CONTRAST_NUMERATOR=""
 CONTRAST_DENOMINATOR=""
 
 ALPHA="0.05"
-LFC_THRESHOLD="1"
 MIN_COUNT="10"
 MIN_SAMPLES="3"
 
@@ -56,7 +55,6 @@ Optional:
   --reference-level STR        reference level for that variable
 
   --alpha FLOAT                adjusted p-value cutoff [default: 0.05]
-  --lfc-threshold FLOAT        abs(log2FC) cutoff for significant table [default: 1]
   --min-count INT              min count threshold for filtering [default: 10]
   --min-samples INT            min number of samples meeting min-count [default: 3]
 
@@ -103,7 +101,6 @@ while [[ $# -gt 0 ]]; do
     --contrast-denominator) CONTRAST_DENOMINATOR="$2"; shift 2 ;;
 
     --alpha) ALPHA="$2"; shift 2 ;;
-    --lfc-threshold) LFC_THRESHOLD="$2"; shift 2 ;;
     --min-count) MIN_COUNT="$2"; shift 2 ;;
     --min-samples) MIN_SAMPLES="$2"; shift 2 ;;
 
@@ -253,7 +250,6 @@ CMD=(
   --contrast-numerator "${CONTRAST_NUMERATOR}"
   --contrast-denominator "${CONTRAST_DENOMINATOR}"
   --alpha "${ALPHA}"
-  --lfc-threshold "${LFC_THRESHOLD}"
   --min-count "${MIN_COUNT}"
   --min-samples "${MIN_SAMPLES}"
 )
