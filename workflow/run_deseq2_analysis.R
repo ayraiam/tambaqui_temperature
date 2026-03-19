@@ -46,56 +46,58 @@ save_plot <- function(plot_obj, filename, width = 8, height = 6) {
 
 get_args <- function() {
   option_list <- list(
-    make_option("--counts-tsv", type = "character", help = "featureCounts TSV file"),
-    make_option("--metadata-tsv", type = "character", help = "Metadata TSV file"),
-    make_option("--outdir", type = "character", help = "Output directory"),
+    make_option("--counts-tsv", type = "character", dest = "counts_tsv",
+                help = "featureCounts TSV file"),
+    make_option("--metadata-tsv", type = "character", dest = "metadata_tsv",
+                help = "Metadata TSV file"),
+    make_option("--outdir", type = "character", dest = "outdir",
+                help = "Output directory"),
     
-    make_option("--sample-col", type = "character", default = "sample",
+    make_option("--sample-col", type = "character", dest = "sample_col", default = "sample",
                 help = "Sample column in metadata [default: %default]"),
     
-    make_option("--design", type = "character", default = "~ Condition",
+    make_option("--design", type = "character", dest = "design", default = "~ Condition",
                 help = "DESeq2 design formula [default: %default]"),
     
-    make_option("--subset-column", type = "character", default = NULL,
+    make_option("--subset-column", type = "character", dest = "subset_column", default = NULL,
                 help = "Optional metadata column used to subset samples"),
-    make_option("--subset-values", type = "character", default = NULL,
+    make_option("--subset-values", type = "character", dest = "subset_values", default = NULL,
                 help = "Comma-separated values to keep from subset-column"),
     
-    make_option("--reference-variable", type = "character", default = NULL,
+    make_option("--reference-variable", type = "character", dest = "reference_variable", default = NULL,
                 help = "Factor column to relevel before DESeq2"),
-    make_option("--reference-level", type = "character", default = NULL,
+    make_option("--reference-level", type = "character", dest = "reference_level", default = NULL,
                 help = "Reference level for reference-variable"),
     
-    make_option("--contrast-variable", type = "character", default = NULL,
+    make_option("--contrast-variable", type = "character", dest = "contrast_variable", default = NULL,
                 help = "Variable for DESeq2 contrast, e.g. Condition"),
-    make_option("--contrast-numerator", type = "character", default = NULL,
+    make_option("--contrast-numerator", type = "character", dest = "contrast_numerator", default = NULL,
                 help = "Numerator level, e.g. T2"),
-    make_option("--contrast-denominator", type = "character", default = NULL,
+    make_option("--contrast-denominator", type = "character", dest = "contrast_denominator", default = NULL,
                 help = "Denominator/reference level, e.g. T1"),
     
-    make_option("--alpha", type = "double", default = 0.05,
+    make_option("--alpha", type = "double", dest = "alpha", default = 0.05,
                 help = "Adjusted p-value cutoff [default: %default]"),
-    make_option("--lfc-threshold", type = "double", default = 1,
-                help = "Absolute log2FC cutoff for significant table [default: %default]"),
     
-    make_option("--min-count", type = "integer", default = 10,
+    make_option("--min-count", type = "integer", dest = "min_count", default = 10,
                 help = "Minimum count threshold for gene filtering [default: %default]"),
-    make_option("--min-samples", type = "integer", default = 3,
+    make_option("--min-samples", type = "integer", dest = "min_samples", default = 3,
                 help = "Minimum number of samples meeting min-count [default: %default]"),
     
-    make_option("--vst-blind", action = "store_true", default = FALSE,
+    make_option("--vst-blind", action = "store_true", dest = "vst_blind", default = FALSE,
                 help = "Run vst(blind=TRUE). Default is FALSE"),
     
-    make_option("--annotation-tsv", type = "character", default = NULL,
+    make_option("--annotation-tsv", type = "character", dest = "annotation_tsv", default = NULL,
                 help = "Optional gene annotation TSV"),
-    make_option("--annotation-id-col", type = "character", default = "Geneid",
+    make_option("--annotation-id-col", type = "character", dest = "annotation_id_col", default = "Geneid",
                 help = "Gene ID column in annotation TSV [default: %default]"),
-    make_option("--annotation-name-col", type = "character", default = "GeneName",
+    make_option("--annotation-name-col", type = "character", dest = "annotation_name_col", default = "GeneName",
                 help = "Gene symbol/name column in annotation TSV [default: %default]")
   )
   
   parser <- OptionParser(option_list = option_list)
   args <- parse_args(parser)
+  print(args)
   
   required <- c("counts_tsv", "metadata_tsv", "outdir")
   missing_required <- required[vapply(required, function(x) is.null(args[[x]]), logical(1))]
@@ -389,7 +391,7 @@ annotate_results <- function(res_df,
   left_join(res_df, ann2, by = "Geneid")
 }
 
-save_result_tables <- function(res_df, alpha, lfc_threshold, outdir, prefix) {
+save_result_tables <- function(res_df, alpha, outdir, prefix) {
   res_df <- res_df |>
     mutate(
       significant = ifelse(!is.na(padj) & padj <= alpha, "yes", "no"),
@@ -454,21 +456,21 @@ plot_ma_result <- function(res_df, outdir, prefix, alpha = 0.05) {
   save_plot(p, file.path(outdir, paste0(prefix, "_MA_plot.png")), width = 7, height = 5)
 }
 
-plot_volcano_result <- function(res_df, outdir, prefix, alpha = 0.05, lfc_threshold = 1) {
+plot_volcano_result <- function(res_df, outdir, prefix, alpha = 0.05) {
   plot_df <- res_df |>
     mutate(
       neglog10padj = -log10(padj),
       status = case_when(
         is.na(padj) ~ "NS",
-        padj <= alpha & log2FoldChange >= lfc_threshold ~ "Up",
-        padj <= alpha & log2FoldChange <= -lfc_threshold ~ "Down",
+        padj <= alpha & log2FoldChange > 0 ~ "Up",
+        padj <= alpha & log2FoldChange < 0 ~ "Down",
+        padj <= alpha & log2FoldChange == 0 ~ "Sig",
         TRUE ~ "NS"
       )
     )
   
   p <- ggplot(plot_df, aes(x = log2FoldChange, y = neglog10padj, color = status)) +
     geom_point(size = 1.2, alpha = 0.7) +
-    geom_vline(xintercept = c(-lfc_threshold, lfc_threshold), linetype = "dashed") +
     geom_hline(yintercept = -log10(alpha), linetype = "dashed") +
     theme_bw(base_size = 12) +
     labs(
@@ -550,7 +552,6 @@ main <- function() {
   save_result_tables(
     res_df = res_df,
     alpha = args$alpha,
-    lfc_threshold = args$lfc_threshold,
     outdir = args$outdir,
     prefix = prefix
   )
@@ -566,8 +567,7 @@ main <- function() {
     res_df = res_df,
     outdir = args$outdir,
     prefix = prefix,
-    alpha = args$alpha,
-    lfc_threshold = args$lfc_threshold
+    alpha = args$alpha
   )
   
   save_session_info(args$outdir)
