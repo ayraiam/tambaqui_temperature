@@ -23,6 +23,7 @@ outdir <- args[[3]]
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
 excluded_samples <- c("RFA-64", "RFA-70", "RFA-74")
+base_font_size <- 16
 
 exclude_flagged_samples <- function(x) {
   x[!x %in% excluded_samples]
@@ -153,7 +154,7 @@ plot_pca_from_vst <- function(vsd, metadata_df, out_prefix, outdir, title_text) 
   cond_pal <- get_condition_palette(scores$condition)
   
   p <- ggplot(scores, aes(x = PC1, y = PC2, color = condition)) +
-    geom_point(size = 3.5) +
+    geom_point(size = 5.5) +
     scale_color_manual(values = cond_pal) +
     labs(
       title = title_text,
@@ -161,8 +162,10 @@ plot_pca_from_vst <- function(vsd, metadata_df, out_prefix, outdir, title_text) 
       y = paste0("\nPC2 (", round(percent_var[2], 1), "%)"),
       color = "Condition"
     ) +
-    theme_classic(base_size = 11) +
+    theme_classic(base_size = base_font_size) +
     theme(
+      panel.grid.major = element_line(color = "grey85", linewidth = 0.4),
+      panel.grid.minor = element_line(color = "grey92", linewidth = 0.25),
       legend.position = "right"
     )
   
@@ -269,7 +272,7 @@ plot_sample_distance_heatmap <- function(count_matrix, metadata_df, outdir) {
     annotation_col = annotation_df,
     annotation_row = annotation_df,
     annotation_colors = ann_colors,
-    fontsize = 9,
+    fontsize = 14,
     border_color = NA,
     main = ""
   )
@@ -284,7 +287,7 @@ plot_sample_distance_heatmap <- function(count_matrix, metadata_df, outdir) {
     annotation_col = annotation_df,
     annotation_row = annotation_df,
     annotation_colors = ann_colors,
-    fontsize = 9,
+    fontsize = 14,
     border_color = NA,
     main = ""
   )
