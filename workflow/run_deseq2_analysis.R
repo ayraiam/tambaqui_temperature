@@ -333,15 +333,31 @@ run_vst_transform <- function(dds, blind = FALSE) {
 }
 
 save_transformed_and_normalized_counts <- function(dds, vsd, outdir) {
+  
+  # Raw counts
+  raw_counts <- counts(dds, normalized = FALSE)
+  
+  # Normalized counts
   norm_counts <- counts(dds, normalized = TRUE)
+  
+  # VST matrix
   vst_mat <- assay(vsd)
   
+  # Save raw counts
+  write.table(
+    raw_counts,
+    file = file.path(outdir, "raw_counts.tsv"),
+    sep = "\t", quote = FALSE, col.names = NA
+  )
+  
+  # Save normalized counts
   write.table(
     norm_counts,
     file = file.path(outdir, "normalized_counts.tsv"),
     sep = "\t", quote = FALSE, col.names = NA
   )
   
+  # Save VST matrix
   write.table(
     vst_mat,
     file = file.path(outdir, "vst_matrix.tsv"),
