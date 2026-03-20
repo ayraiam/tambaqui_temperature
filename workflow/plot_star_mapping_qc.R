@@ -166,14 +166,14 @@ plot_mapping_qc <- function(summary_tsv, outdir) {
     filename = file.path(outdir, "star_mapping_qc_stacked_percent.pdf"),
     plot = p_pct,
     width = 10,
-    height = 7
+    height = 12
   )
   
   ggsave(
     filename = file.path(outdir, "star_mapping_qc_stacked_percent.png"),
     plot = p_pct,
     width = 10,
-    height = 7,
+    height = 12,
     dpi = 300
   )
   
