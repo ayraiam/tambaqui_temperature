@@ -20,7 +20,8 @@ counts_tsv <- args[[3]]
 
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
-excluded_samples <- c("RFA-64", "RFA-70")
+excluded_samples <- c("RFA-64", "RFA-70", "RFA-74")
+base_font_size <- 16
 
 exclude_flagged_samples <- function(x) {
   x[!x %in% excluded_samples]
@@ -49,7 +50,6 @@ sample_dot_palette <- c(
   "#ffd166"
 )
 
-# Paired-like palette without the heavy green
 mapping_qc_palette <- c(
   "Uniquely mapped" = "#a6cee3",
   "Mapped to multiple loci" = "#1f78b4",
@@ -149,7 +149,7 @@ plot_mapping_qc <- function(summary_tsv, outdir) {
       y = "\nReads (%)",
       fill = NULL
     ) +
-    theme_classic(base_size = 11) +
+    theme_classic(base_size = base_font_size) +
     theme(
       panel.grid.major.y = element_blank(),
       panel.grid.minor = element_blank(),
@@ -157,7 +157,7 @@ plot_mapping_qc <- function(summary_tsv, outdir) {
         angle = 45,
         hjust = 1,
         vjust = 1,
-        size = 8
+        size = 13
       ),
       legend.position = "right"
     )
@@ -186,11 +186,11 @@ plot_mapping_qc <- function(summary_tsv, outdir) {
       y = "Reads (count)",
       fill = NULL
     ) +
-    theme_bw(base_size = 11) +
+    theme_bw(base_size = base_font_size) +
     theme(
       panel.grid.major.y = element_blank(),
       panel.grid.minor = element_blank(),
-      axis.text.y = element_text(size = 8),
+      axis.text.y = element_text(size = 13),
       legend.position = "right"
     )
   
@@ -257,7 +257,6 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
   write_tsv(qc_table, file.path(outdir, "featurecounts_sample_qc.tsv"))
   
   set.seed(123)
-  
   dot_colors <- sample(sample_dot_palette, size = nrow(qc_table), replace = FALSE)
   
   qc_table_lib <- qc_table %>%
@@ -277,7 +276,7 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
       width = 0.9,
       alpha = 0.75,
       trim = FALSE
-    )  +
+    ) +
     geom_beeswarm(
       aes(color = sample),
       size = 3.2,
@@ -291,31 +290,32 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
       color = "black",
       alpha = .75
     ) +
+    coord_flip() +
     scale_color_manual(values = setNames(qc_table_lib$dot_color, qc_table_lib$sample)) +
     labs(
       title = "",
       x = NULL,
       y = "Assigned reads\n"
     ) +
-    theme_classic(base_size = 11) +
+    theme_classic(base_size = base_font_size) +
     theme(
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
       legend.position = "right"
     )
   
   ggsave(
     filename = file.path(outdir, "featurecounts_library_size_violin_box_beeswarm.pdf"),
     plot = p_lib,
-    width = 4.5,
-    height = 5
+    width = 5,
+    height = 4.5
   )
   
   ggsave(
     filename = file.path(outdir, "featurecounts_library_size_violin_box_beeswarm.png"),
     plot = p_lib,
-    width = 3,
-    height = 5,
+    width = 5,
+    height = 4.5,
     dpi = 300
   )
   
@@ -336,7 +336,7 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
       width = 0.9,
       alpha = 0.75,
       trim = FALSE
-    )  +
+    ) +
     geom_beeswarm(
       aes(color = sample),
       size = 3.2,
@@ -350,31 +350,32 @@ plot_featurecounts_sample_qc <- function(counts_tsv, outdir) {
       color = "black",
       alpha = .75
     ) +
+    coord_flip() +
     scale_color_manual(values = setNames(qc_table_det$dot_color, qc_table_det$sample)) +
     labs(
       title = "",
       x = NULL,
       y = "Detected genes\n"
     ) +
-    theme_classic(base_size = 11) +
+    theme_classic(base_size = base_font_size) +
     theme(
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
       legend.position = "right"
     )
   
   ggsave(
     filename = file.path(outdir, "featurecounts_detected_genes_violin_box_beeswarm.pdf"),
     plot = p_det,
-    width = 4.5,
-    height = 5
+    width = 5,
+    height = 4.5
   )
   
   ggsave(
     filename = file.path(outdir, "featurecounts_detected_genes_violin_box_beeswarm.png"),
     plot = p_det,
-    width = 3,
-    height = 5,
+    width = 5,
+    height = 4.5,
     dpi = 300
   )
 }
