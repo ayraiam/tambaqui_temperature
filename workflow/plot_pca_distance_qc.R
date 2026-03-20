@@ -278,7 +278,7 @@ plot_sample_distance_heatmap <- function(count_matrix, metadata_df, outdir) {
   )
   dev.off()
   
-  png(file.path(outdir, "sample_distance_heatmap_all_samples.png"), width = 2400, height = 2100, res = 300)
+  png(file.path(outdir, "sample_distance_heatmap_all_samples.png"), width = 2600, height = 2500, res = 300)
   pheatmap(
     sample_dist_matrix,
     color = heat_cols,
