@@ -26,6 +26,7 @@ dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 # Settings
 # -----------------------------
 excluded_samples <- c("RFA-64", "RFA-70", "RFA-74")
+base_font_size <- 16
 
 extract_sample_id <- function(x) {
   x2 <- ifelse(grepl("/", x, fixed = TRUE), basename(dirname(x)), x)
@@ -183,15 +184,15 @@ p <- ggplot(plot_df, aes(x = factor, y = variance, fill = factor)) +
   geom_violin(trim = FALSE, alpha = 0.5, color = NA) +
   geom_boxplot(width = 0.15, outlier.shape = NA, fill = "white") +
   scale_fill_manual(values = c(
-    "Condition" = "grey", #"#8da0cb"
-    "Residual" = "grey"#"#bdbdbd"
+    "Condition" = "grey",
+    "Residual" = "grey"
   )) +
   labs(
     title = "",
     x = NULL,
     y = "Fraction of variance explained\n"
   ) +
-  theme_classic(base_size = 11) +
+  theme_classic(base_size = base_font_size) +
   theme(
     legend.position = "none"
   )
