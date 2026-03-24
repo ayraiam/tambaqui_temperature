@@ -32,8 +32,16 @@ Required:
   --outdir DIR
   --source-metadata-tsv PATH
   --source-protein-faa PATH
-  --target-metadata-tsv PATH
-  --target-protein-faa PATH
+  Required for all modes:
+    --deseq-tsv PATH
+    --outdir DIR
+    --source-metadata-tsv PATH
+    --source-protein-faa PATH
+    --mode STR                all|prepare|diamond|merge|analysis [default: all]
+
+	Additionally required for modes other than prepare:
+	  --target-metadata-tsv PATH
+	  --target-protein-faa PATH
   --mode STR                all|prepare|diamond|merge|analysis [default: all]
 
 Optional:
@@ -76,10 +84,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for f in "$DESEQ_TSV" "$SOURCE_METADATA_TSV" "$SOURCE_PROTEIN_FAA" "$TARGET_METADATA_TSV" "$TARGET_PROTEIN_FAA"; do
-  [[ -n "$f" ]] || { echo "ERROR: missing required file argument" >&2; exit 2; }
-  [[ -f "$f" ]] || { echo "ERROR: file not found: $f" >&2; exit 2; }
-done
+if [[ "${MODE}" == "prepare" ]]; then
+  for f in "$DESEQ_TSV" "$SOURCE_METADATA_TSV" "$SOURCE_PROTEIN_FAA"; do
+    [[ -n "$f" ]] || { echo "ERROR: missing required file argument for prepare mode" >&2; exit 2; }
+    [[ -f "$f" ]] || { echo "ERROR: file not found: $f" >&2; exit 2; }
+  done
+else
+  for f in "$DESEQ_TSV" "$SOURCE_METADATA_TSV" "$SOURCE_PROTEIN_FAA" "$TARGET_METADATA_TSV" "$TARGET_PROTEIN_FAA"; do
+    [[ -n "$f" ]] || { echo "ERROR: missing required file argument" >&2; exit 2; }
+    [[ -f "$f" ]] || { echo "ERROR: file not found: $f" >&2; exit 2; }
+  done
+fi
 
 [[ -n "${OUTDIR}" ]] || { echo "ERROR: --outdir is required" >&2; exit 2; }
 
