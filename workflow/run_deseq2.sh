@@ -181,6 +181,9 @@ create_env_if_needed() {
   set +e
   ${SOLVER} create -n "${ENV_NAME}" -y -c conda-forge -c bioconda \
     python=3.11 \
+    pandas \
+    biopython \
+    diamond \
     r-base=4.3 \
     r-optparse \
     r-readr \
@@ -192,7 +195,10 @@ create_env_if_needed() {
     r-pheatmap \
     r-rcolorbrewer \
     bioconductor-deseq2 \
-    bioconductor-apeglm
+    bioconductor-apeglm \
+    bioconductor-clusterprofiler \
+    bioconductor-org.dr.eg.db \
+    bioconductor-enrichplot
   st=$?
   set -e
 
@@ -224,8 +230,14 @@ export_env_snapshot() {
 }
 
 check_tools() {
-  conda run -n "${ENV_NAME}" Rscript -e "library(optparse); library(readr); library(dplyr); library(tidyr); library(tibble); library(stringr); library(ggplot2); library(DESeq2)" >/dev/null 2>&1 \
+  conda run -n "${ENV_NAME}" python -c "import pandas, Bio" >/dev/null 2>&1 \
+    || { echo "ERROR: required Python packages not available in env ${ENV_NAME}" >&2; exit 2; }
+
+  conda run -n "${ENV_NAME}" Rscript -e "library(optparse); library(readr); library(dplyr); library(tidyr); library(tibble); library(stringr); library(ggplot2); library(DESeq2); library(clusterProfiler); library(org.Dr.eg.db); library(enrichplot)" >/dev/null 2>&1 \
     || { echo "ERROR: required R packages not available in env ${ENV_NAME}" >&2; exit 2; }
+
+  conda run -n "${ENV_NAME}" diamond version >/dev/null 2>&1 \
+    || { echo "ERROR: diamond not available in env ${ENV_NAME}" >&2; exit 2; }
 }
 
 if ! find_and_source_conda; then
