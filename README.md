@@ -13,6 +13,10 @@
   <img src="https://img.shields.io/badge/RSeQC-supported-yellow">
   <img src="https://img.shields.io/badge/featureCounts-ready-red">
   <img src="https://img.shields.io/badge/Subread-featureCounts-red">
+  <img src="https://img.shields.io/badge/DESeq2-integrated-red">
+  <img src="https://img.shields.io/badge/Functional%20Enrichment-ORA%20%2B%20GSEA-blue">
+  <img src="https://img.shields.io/badge/DIAMOND-orthology-mapping-orange">
+  <img src="https://img.shields.io/badge/clusterProfiler-supported-green">
 </p>
 
 <p align="center">
@@ -53,6 +57,10 @@ It provides a structured, re-entrant framework for:
   20) Full provenance logging
   21) Differential gene expression analysis using DESeq2
   22) Statistical-first reporting without arbitrary log2FC thresholds
+  23) Functional enrichment analysis via ORA and GSEA
+  24) Orthology mapping via DIAMOND against Danio rerio
+  25) Automated gene ID harmonization for non-model organisms
+  26) Pathway-level biological interpretation of transcriptomic results  
   
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
@@ -92,6 +100,10 @@ STRUCTURE
    make_qc_summary_table.py
    run_deseq2.sh
    run_deseq2_analysis.R
+   run_enrichment.sh
+   run_enrichment_analysis.R
+   prepare_enrichment_inputs.py
+   merge_diamond_hits.py
 
  /envs/                          - Auto-exported Conda environments
  /logs/                          - Timestamped stdout/stderr logs
@@ -99,8 +111,12 @@ STRUCTURE
    fastq_meta.tsv                - Auto-generated FASTQ manifest
  /data/                          - Input FASTQ(.gz) files
  /reference/
-   genome.fa                     - Reference genome
-   annotation.gtf                - Gene annotation
+   genome.fa
+   annotation.gtf
+   protein.faa
+   ncbi_dataset.tsv
+   danio_rerio_protein.faa
+   danio_rerio_ncbi_dataset.tsv
    star_index/                   - STAR genome index
   /results/
    qc_raw/
@@ -116,6 +132,7 @@ STRUCTURE
    rseqc/
    FigMappingQCandVar/          - STAR mapping QC tables + plots
   deseq2/
+  enrichment/
     
 
  README.md
@@ -148,6 +165,8 @@ DESIGN PRINCIPLES
  - Safe re-entry (existing BAMs skipped)
  - Statistical significance prioritized over arbitrary fold-change thresholds
  - Full result tables retained for downstream interpretation
+ - Designed for non-model organisms lacking curated pathway annotation
+ - Orthology-based functional inference via DIAMOND alignment
 </pre>
 
 ---
@@ -505,6 +524,96 @@ Recommended contrasts:
 
 This stage represents the primary statistical analysis
 of the transcriptomic response.
+
+Stage 13 — Functional Enrichment Analysis (ORA + GSEA)
+
+This stage identifies biological pathways and cellular processes
+associated with differential gene expression results.
+
+Because tambaqui is not a model organism, gene identifiers are first
+mapped to orthologous genes in Danio rerio (zebrafish) using DIAMOND.
+
+Workflow:
+
+  1) Extract protein sequences for DE genes
+  2) Align tambaqui proteins against zebrafish proteome using DIAMOND
+  3) Retrieve ortholog gene identifiers
+  4) Perform pathway enrichment analysis
+
+Two complementary approaches are used:
+
+ORA (Over-representation analysis)
+  Tests whether significant DE genes are enriched for biological pathways.
+
+GSEA (Gene set enrichment analysis)
+  Uses the ranked gene list to detect coordinated pathway-level shifts.
+
+Enrichment databases:
+
+  • Gene Ontology (GO)
+      - Biological Process
+      - Molecular Function
+      - Cellular Component
+
+  • KEGG pathways
+
+Methodological features:
+
+  • Uses full DESeq2 results table (no log2FC filtering)
+  • Automatically handles ID conversion
+  • Deduplicates gene mappings for robust ranking
+  • Compatible with non-model organisms
+
+Inputs:
+
+  results/deseq2/<contrast>/<contrast>_all_genes.tsv
+
+  reference/protein.faa
+      tambaqui protein sequences
+
+  reference/ncbi_dataset.tsv
+      tambaqui gene annotation table
+
+  reference/danio_rerio_protein.faa
+      zebrafish reference proteome
+
+  reference/danio_rerio_ncbi_dataset.tsv
+      zebrafish gene annotation table
+
+Outputs:
+
+  results/enrichment/<contrast>/
+
+  01_prepare/
+      source_annotation_from_deseq.tsv
+      query_proteins.faa
+
+  02_diamond/
+      diamond_best_hits.tsv
+      deseq_annotated_with_danio_hits.tsv
+
+  03_enrichment/
+
+      ORA_GO_BP.tsv
+      ORA_GO_MF.tsv
+      ORA_GO_CC.tsv
+      ORA_KEGG.tsv
+
+      GSEA_GO_BP.tsv
+      GSEA_GO_MF.tsv
+      GSEA_GO_CC.tsv
+      GSEA_KEGG.tsv
+
+      ORA_dotplot.pdf
+      GSEA_dotplot.pdf
+
+Interpretation:
+
+  ORA identifies pathways over-represented among significant genes.
+
+  GSEA identifies pathways with consistent directional expression shifts.
+
+Together, these approaches provide complementary biological insight.
 </pre>
 
 ---
@@ -589,6 +698,29 @@ DESeq2:
   --deseq2-alpha FLOAT
   --deseq2-min-count INT
   --deseq2-min-samples INT  
+
+ Functional enrichment:
+  --enrich
+  --enrich-mode STR
+      all|prepare|diamond|merge|analysis
+
+  --enrich-deseq-tsv PATH
+      DESeq2 results table
+
+  --enrich-source-metadata-tsv PATH
+      ncbi_dataset.tsv for tambaqui
+
+  --enrich-source-protein-faa PATH
+      protein sequences for tambaqui
+
+  --enrich-target-metadata-tsv PATH
+      ncbi_dataset.tsv for Danio rerio
+
+  --enrich-target-protein-faa PATH
+      zebrafish proteome FASTA
+
+  --enrich-outdir PATH
+      output directory
 </pre>
 
 ---
@@ -723,6 +855,30 @@ bash workflow/runall.sh \
   --deseq2-contrast-variable Condition \
   --deseq2-contrast-numerator T2 \
   --deseq2-contrast-denominator T1
+
+# 16) Prepare enrichment inputs only
+
+bash workflow/runall.sh \
+  --no-qc \
+  --enrich \
+  --enrich-mode prepare \
+  --enrich-deseq-tsv results/deseq2/T2_vs_T1/condition_T2_vs_T1_all_genes.tsv \
+  --enrich-source-metadata-tsv reference/ncbi_dataset.tsv \
+  --enrich-source-protein-faa reference/protein.faa \
+  --enrich-outdir results/enrichment/T2_vs_T1
+
+
+# 17) Run full functional enrichment workflow
+
+bash workflow/runall.sh \
+  --no-qc \
+  --enrich \
+  --enrich-deseq-tsv results/deseq2/T2_vs_T1/condition_T2_vs_T1_all_genes.tsv \
+  --enrich-source-metadata-tsv reference/ncbi_dataset.tsv \
+  --enrich-source-protein-faa reference/protein.faa \
+  --enrich-target-metadata-tsv reference/danio_rerio_ncbi_dataset.tsv \
+  --enrich-target-protein-faa reference/danio_rerio_protein.faa \
+  --enrich-outdir results/enrichment/T2_vs_T1
 </pre>
 
 <pre>
@@ -769,6 +925,16 @@ Includes:
     edgeR                (normalization + filtering)
     variancePartition    (variance decomposition)  
     apeglm (optional for shrinkage)
+    clusterProfiler
+    enrichplot
+    org.Dr.eg.db
+
+Python:
+  pandas
+  biopython
+
+Alignment:
+  DIAMOND
   
 If missing, the following packages will be installed automatically
 into the active Conda environment:
