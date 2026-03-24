@@ -240,6 +240,49 @@ if [[ "${MODE}" == "all" || "${MODE}" == "diamond" ]]; then
     --threads "${THREADS}"
 fi
 
+echo ">>> Step 2c: split query FASTA into hit vs no-hit sets"
+
+conda run -n "${ENV_NAME}" python - <<PY
+from pathlib import Path
+from Bio import SeqIO
+
+query_faa = Path("${PREP_DIR}") / "query_proteins.faa"
+hits_tsv = Path("${DIAMOND_DIR}") / "diamond_best_hits.tsv"
+out_hit_faa = Path("${DIAMOND_DIR}") / "query_proteins_with_hits.faa"
+out_nohit_faa = Path("${DIAMOND_DIR}") / "query_proteins_no_hits.faa"
+out_summary = Path("${DIAMOND_DIR}") / "diamond_hit_status_summary.tsv"
+
+hit_ids = set()
+if hits_tsv.exists() and hits_tsv.stat().st_size > 0:
+	with open(hits_tsv) as fh:
+			for line in fh:
+					parts = line.rstrip("\\n").split("\\t")
+					if parts and parts[0]:
+							hit_ids.add(parts[0])
+
+with_hits = []
+no_hits = []
+
+for rec in SeqIO.parse(str(query_faa), "fasta"):
+	if rec.id in hit_ids:
+			with_hits.append(rec)
+	else:
+			no_hits.append(rec)
+
+SeqIO.write(with_hits, str(out_hit_faa), "fasta")
+SeqIO.write(no_hits, str(out_nohit_faa), "fasta")
+
+with open(out_summary, "w") as fh:
+	fh.write("metric\\tvalue\\n")
+	fh.write(f"query_proteins_total\\t{len(with_hits) + len(no_hits)}\\n")
+	fh.write(f"query_proteins_with_hits\\t{len(with_hits)}\\n")
+	fh.write(f"query_proteins_no_hits\\t{len(no_hits)}\\n")
+
+print(f">>> Wrote FASTA with hits: {out_hit_faa}")
+print(f">>> Wrote FASTA with no hits: {out_nohit_faa}")
+print(f">>> Wrote summary: {out_summary}")
+PY
+
 if [[ "${MODE}" == "diamond" ]]; then
   echo ">>> Done."
   echo ">>> DIAMOND outputs: ${DIAMOND_DIR}"
