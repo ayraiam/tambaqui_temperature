@@ -38,20 +38,31 @@ dedup_ranked <- function(df, gene_col, score_col) {
 
 get_args <- function() {
   option_list <- list(
-    make_option("--annotated-tsv", type = "character"),
-    make_option("--outdir", type = "character"),
-    make_option("--alpha", type = "double", default = 0.05),
-    make_option("--target-geneid-col", type = "character", default = "target_Gene_ID"),
-    make_option("--logfc-col", type = "character", default = "log2FoldChange"),
-    make_option("--padj-col", type = "character", default = "padj")
+    make_option("--annotated-tsv", type = "character", dest = "annotated_tsv",
+                help = "Annotated DE table with Danio rerio mappings"),
+    make_option("--outdir", type = "character", dest = "outdir",
+                help = "Output directory"),
+    make_option("--alpha", type = "double", dest = "alpha", default = 0.05,
+                help = "Adjusted p-value cutoff [default: %default]"),
+    make_option("--target-geneid-col", type = "character", dest = "target_geneid_col", default = "target_Gene_ID",
+                help = "Column containing zebrafish Gene IDs [default: %default]"),
+    make_option("--logfc-col", type = "character", dest = "logfc_col", default = "log2FoldChange",
+                help = "Column containing ranking statistic / log2FC [default: %default]"),
+    make_option("--padj-col", type = "character", dest = "padj_col", default = "padj",
+                help = "Column containing adjusted p-values [default: %default]")
   )
+  
   parser <- OptionParser(option_list = option_list)
   args <- parse_args(parser)
   
-  if (is.null(args$annotated_tsv) || is.null(args$outdir)) {
+  required <- c("annotated_tsv", "outdir")
+  missing_required <- required[vapply(required, function(x) is.null(args[[x]]), logical(1))]
+  
+  if (length(missing_required) > 0) {
     print_help(parser)
-    stop("Missing required arguments")
+    stop("Missing required arguments: ", paste(missing_required, collapse = ", "))
   }
+  
   args
 }
 
