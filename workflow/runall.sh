@@ -90,6 +90,26 @@ MAPQC_ENV_FILE="envs/mappingqc_var_env.yml"
 MAPQC_COUNTS_TSV=""
 MAPQC_METADATA_TSV=""
 
+RUN_ENRICH=0
+ENRICH_DESEQ_TSV=""
+ENRICH_OUTDIR=""
+ENRICH_ENV_NAME="deseq2_downstream_env"
+ENRICH_ENV_FILE="envs/deseq2_downstream_env.yml"
+
+ENRICH_SOURCE_METADATA_TSV=""
+ENRICH_SOURCE_PROTEIN_FAA=""
+ENRICH_TARGET_METADATA_TSV=""
+ENRICH_TARGET_PROTEIN_FAA=""
+ENRICH_TARGET_DMND=""
+
+ENRICH_DESEQ_JOIN_COL="Geneid"
+ENRICH_SOURCE_JOIN_COL="Gene ID"
+
+ENRICH_ALPHA="0.05"
+ENRICH_EVALUE="1e-5"
+ENRICH_MAX_TARGET_SEQS="1"
+ENRICH_MODE="all"
+
 usage() {
   cat <<EOF
 Usage: bash workflow/runall.sh [options]
@@ -171,7 +191,28 @@ DESeq2 differential expression:
     --deseq2-min-samples INT        min samples passing min count
     --deseq2-annotation-tsv PATH    optional annotation TSV
     --deseq2-annotation-id-col STR  annotation gene ID column
-    --deseq2-annotation-name-col STR annotation gene name column
+    --deseq2-annotation-name-col STR annotation gene name
+Enrichment annotation + ORA/GSEA:
+    --enrich                          Run ortholog annotation + ORA + GSEA
+    --enrich-deseq-tsv PATH           DESeq2 table to annotate
+    --enrich-outdir DIR               Output root for enrichment
+    --enrich-env-name STR             Conda env name
+    --enrich-env-file PATH            Conda env snapshot path
+
+    --enrich-source-metadata-tsv PATH Tambaqui ncbi_dataset.tsv
+    --enrich-source-protein-faa PATH  Tambaqui protein.faa
+    --enrich-target-metadata-tsv PATH Danio rerio ncbi_dataset.tsv
+    --enrich-target-protein-faa PATH  Danio rerio protein.faa
+    --enrich-target-dmnd PATH         Optional existing DIAMOND db
+
+    --enrich-deseq-join-col STR       Join col in DESeq table [default: Geneid]
+    --enrich-source-join-col STR      Join col in source metadata [default: Gene ID]
+
+    --enrich-alpha FLOAT              padj cutoff for ORA [default: 0.05]
+    --enrich-evalue FLOAT             DIAMOND evalue [default: 1e-5]
+    --enrich-max-target-seqs INT      DIAMOND max target seqs [default: 1]
+
+    --enrich-mode STR               all|prepare|diamond|merge|analysis [default: all]
 Notes:
   You can also toggle via environment variables:
     FASTP_TRIM_POLYG=0|1
@@ -254,6 +295,25 @@ while [[ $# -gt 0 ]]; do
     --deseq2-annotation-tsv) DESEQ2_ANNOTATION_TSV="$2"; shift 2 ;;
     --deseq2-annotation-id-col) DESEQ2_ANNOTATION_ID_COL="$2"; shift 2 ;;
     --deseq2-annotation-name-col) DESEQ2_ANNOTATION_NAME_COL="$2"; shift 2 ;;
+    --enrich) RUN_ENRICH=1; shift 1 ;;
+    --enrich-deseq-tsv) ENRICH_DESEQ_TSV="$2"; shift 2 ;;
+    --enrich-outdir) ENRICH_OUTDIR="$2"; shift 2 ;;
+    --enrich-env-name) ENRICH_ENV_NAME="$2"; shift 2 ;;
+    --enrich-env-file) ENRICH_ENV_FILE="$2"; shift 2 ;;
+
+    --enrich-source-metadata-tsv) ENRICH_SOURCE_METADATA_TSV="$2"; shift 2 ;;
+    --enrich-source-protein-faa) ENRICH_SOURCE_PROTEIN_FAA="$2"; shift 2 ;;
+    --enrich-target-metadata-tsv) ENRICH_TARGET_METADATA_TSV="$2"; shift 2 ;;
+    --enrich-target-protein-faa) ENRICH_TARGET_PROTEIN_FAA="$2"; shift 2 ;;
+    --enrich-target-dmnd) ENRICH_TARGET_DMND="$2"; shift 2 ;;
+
+    --enrich-deseq-join-col) ENRICH_DESEQ_JOIN_COL="$2"; shift 2 ;;
+    --enrich-source-join-col) ENRICH_SOURCE_JOIN_COL="$2"; shift 2 ;;
+
+    --enrich-alpha) ENRICH_ALPHA="$2"; shift 2 ;;
+    --enrich-evalue) ENRICH_EVALUE="$2"; shift 2 ;;
+    --enrich-max-target-seqs) ENRICH_MAX_TARGET_SEQS="$2"; shift 2 ;;
+    --enrich-mode) ENRICH_MODE="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
@@ -291,6 +351,14 @@ fi
 
 if [[ -z "${DESEQ2_OUTDIR}" ]]; then
   DESEQ2_OUTDIR="${RESULTS_ABS}/deseq2"
+fi
+
+if [[ -z "${ENRICH_DESEQ_TSV}" ]]; then
+  ENRICH_DESEQ_TSV="${DESEQ2_OUTDIR}/$(basename "${DESEQ2_CONTRAST_VARIABLE}_${DESEQ2_CONTRAST_NUMERATOR}_vs_${DESEQ2_CONTRAST_DENOMINATOR}_all_genes.tsv")"
+fi
+
+if [[ -z "${ENRICH_OUTDIR}" ]]; then
+  ENRICH_OUTDIR="${RESULTS_ABS}/enrichment"
 fi
 
 mkdir -p logs metadata
@@ -358,6 +426,22 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "DESEQ2_ANNOTATION_TSV: ${DESEQ2_ANNOTATION_TSV}"
   echo "DESEQ2_ANNOTATION_ID_COL: ${DESEQ2_ANNOTATION_ID_COL}"
   echo "DESEQ2_ANNOTATION_NAME_COL: ${DESEQ2_ANNOTATION_NAME_COL}"
+  echo "RUN_ENRICH: ${RUN_ENRICH}"
+  echo "ENRICH_DESEQ_TSV: ${ENRICH_DESEQ_TSV}"
+  echo "ENRICH_OUTDIR: ${ENRICH_OUTDIR}"
+  echo "ENRICH_ENV_NAME: ${ENRICH_ENV_NAME}"
+  echo "ENRICH_ENV_FILE: ${ENRICH_ENV_FILE}"
+  echo "ENRICH_SOURCE_METADATA_TSV: ${ENRICH_SOURCE_METADATA_TSV}"
+  echo "ENRICH_SOURCE_PROTEIN_FAA: ${ENRICH_SOURCE_PROTEIN_FAA}"
+  echo "ENRICH_TARGET_METADATA_TSV: ${ENRICH_TARGET_METADATA_TSV}"
+  echo "ENRICH_TARGET_PROTEIN_FAA: ${ENRICH_TARGET_PROTEIN_FAA}"
+  echo "ENRICH_TARGET_DMND: ${ENRICH_TARGET_DMND}"
+  echo "ENRICH_DESEQ_JOIN_COL: ${ENRICH_DESEQ_JOIN_COL}"
+  echo "ENRICH_SOURCE_JOIN_COL: ${ENRICH_SOURCE_JOIN_COL}"
+  echo "ENRICH_ALPHA: ${ENRICH_ALPHA}"
+  echo "ENRICH_EVALUE: ${ENRICH_EVALUE}"
+  echo "ENRICH_MAX_TARGET_SEQS: ${ENRICH_MAX_TARGET_SEQS}"
+  echo "ENRICH_MODE: ${ENRICH_MODE}"
   echo "=========================================="
 } > "$INVOCATION_LOG"
 
@@ -499,6 +583,42 @@ if [[ "${RUN_DESEQ2}" -eq 1 ]]; then
     2> >(tee -a "${DESEQ2_ERR_LOG}" >&2)
 
   echo ">>> DESeq2 logs: ${DESEQ2_OUT_LOG} / ${DESEQ2_ERR_LOG}"
+fi
+
+# -------------------
+# Enrichment annotation + ORA/GSEA stage
+# -------------------
+if [[ "${RUN_ENRICH}" -eq 1 ]]; then
+  ENRICH_TS="$(date +%Y%m%d_%H%M%S)"
+  ENRICH_OUT_LOG="logs/enrich_${ENRICH_TS}.out"
+  ENRICH_ERR_LOG="logs/enrich_${ENRICH_TS}.err"
+
+  ENRICH_ARGS=(
+    --deseq-tsv "${ENRICH_DESEQ_TSV}"
+    --outdir "${ENRICH_OUTDIR}"
+    --env-name "${ENRICH_ENV_NAME}"
+    --env-file "${ENRICH_ENV_FILE}"
+    --source-metadata-tsv "${ENRICH_SOURCE_METADATA_TSV}"
+    --source-protein-faa "${ENRICH_SOURCE_PROTEIN_FAA}"
+    --target-metadata-tsv "${ENRICH_TARGET_METADATA_TSV}"
+    --target-protein-faa "${ENRICH_TARGET_PROTEIN_FAA}"
+    --deseq-join-col "${ENRICH_DESEQ_JOIN_COL}"
+    --source-join-col "${ENRICH_SOURCE_JOIN_COL}"
+    --alpha "${ENRICH_ALPHA}"
+    --threads "${CPUS}"
+    --evalue "${ENRICH_EVALUE}"
+    --max-target-seqs "${ENRICH_MAX_TARGET_SEQS}"
+    --mode "${ENRICH_MODE}"
+  )
+
+  [[ -n "${ENRICH_TARGET_DMND}" ]] && ENRICH_ARGS+=( --target-dmnd "${ENRICH_TARGET_DMND}" )
+
+  echo ">>> Running enrichment stage"
+  bash workflow/run_enrichment.sh "${ENRICH_ARGS[@]}" \
+    1> >(tee -a "${ENRICH_OUT_LOG}") \
+    2> >(tee -a "${ENRICH_ERR_LOG}" >&2)
+
+  echo ">>> Enrichment logs: ${ENRICH_OUT_LOG} / ${ENRICH_ERR_LOG}"
 fi
 
 # -------------------
