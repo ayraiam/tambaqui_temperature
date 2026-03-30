@@ -159,21 +159,21 @@ make_candidate_gene_table <- function(
   gsea_counts_df <- count_gsea_core_terms(gsea_df, alpha = alpha)
   
   candidate_df <- deseq_df |>
-    mutate(
+    dplyr::mutate(
       Geneid = as.character(Geneid),
       abs_log2FoldChange = abs(log2FoldChange)
     ) |>
-    left_join(mean_norm_all_df, by = "Geneid") |>
-    left_join(mean_norm_g1_df, by = "Geneid") |>
-    left_join(mean_norm_g2_df, by = "Geneid") |>
-    left_join(gsea_counts_df, by = "Geneid") |>
-    mutate(
+    dplyr::left_join(mean_norm_all_df, by = "Geneid") |>
+    dplyr::left_join(mean_norm_g1_df, by = "Geneid") |>
+    dplyr::left_join(mean_norm_g2_df, by = "Geneid") |>
+    dplyr::left_join(gsea_counts_df, by = "Geneid") |>
+    dplyr::mutate(
       gsea_go_core_term_count = ifelse(is.na(gsea_go_core_term_count), 0L, gsea_go_core_term_count),
       candidate_score = abs_log2FoldChange *
         log10(mean_norm_all + 1) *
         (1 + log2(gsea_go_core_term_count + 1))
     ) |>
-    select(
+    dplyr::select(
       Geneid,
       GeneName,
       log2FoldChange,
@@ -181,15 +181,15 @@ make_candidate_gene_table <- function(
       padj,
       baseMean,
       mean_norm_all,
-      starts_with("mean_norm_"),
+      dplyr::starts_with("mean_norm_"),
       gsea_go_core_term_count,
       candidate_score
     ) |>
-    arrange(
-      desc(gsea_go_core_term_count),
-      desc(abs_log2FoldChange),
+    dplyr::arrange(
+      dplyr::desc(gsea_go_core_term_count),
+      dplyr::desc(abs_log2FoldChange),
       padj,
-      desc(baseMean)
+      dplyr::desc(baseMean)
     )
   
   out_tsv <- file.path(outdir, "candidate_gene_table.tsv")
