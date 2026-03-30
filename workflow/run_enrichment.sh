@@ -101,7 +101,7 @@ if [[ "${MODE}" == "prepare" ]]; then
     [[ -f "$f" ]] || { echo "ERROR: file not found: $f" >&2; exit 2; }
   done
 elif [[ "${MODE}" == "candidates" ]]; then
-  for f in "$DESEQ_TSV" "$NORMALIZED_COUNTS_TSV" "$METADATA_TSV" "$GSEA_GO_TSV"; do
+  for f in "$NORMALIZED_COUNTS_TSV" "$METADATA_TSV" "$GSEA_GO_TSV"; do
     [[ -n "$f" ]] || { echo "ERROR: missing required file argument for candidates mode" >&2; exit 2; }
     [[ -f "$f" ]] || { echo "ERROR: file not found: $f" >&2; exit 2; }
   done
@@ -289,17 +289,27 @@ if [[ "${MODE}" == "all" || "${MODE}" == "analysis" ]]; then
 fi
 
 if [[ "${MODE}" == "candidates" ]]; then
+  ANNOTATED_TSV="${DIAMOND_DIR}/deseq_annotated_with_danio_hits.tsv"
+
+  [[ -f "${ANNOTATED_TSV}" ]] || {
+    echo "ERROR: annotated table not found for candidates mode: ${ANNOTATED_TSV}" >&2
+    echo "Run enrichment merge/all first to generate 02_diamond/deseq_annotated_with_danio_hits.tsv" >&2
+    exit 2
+  }
+
   echo ">>> Step 5: build candidate gene table"
   conda run -n "${ENV_NAME}" Rscript workflow/run_enrichment_analysis.R \
     --task candidates \
-    --deseq-tsv "${DESEQ_TSV}" \
+    --annotated-tsv "${ANNOTATED_TSV}" \
     --normalized-counts-tsv "${NORMALIZED_COUNTS_TSV}" \
     --metadata-tsv "${METADATA_TSV}" \
     --gsea-go-tsv "${GSEA_GO_TSV}" \
     --outdir "${CANDIDATE_DIR}" \
     --sample-col "${SAMPLE_COL}" \
     --group-col "${GROUP_COL}" \
-    --alpha "${ALPHA}"
+    --alpha "${ALPHA}" \
+    --source-geneid-col "Geneid" \
+    --target-geneid-col "target_Gene_ID"
 
   echo ">>> Done."
   echo ">>> Candidate outputs: ${CANDIDATE_DIR}"
