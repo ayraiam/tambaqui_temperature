@@ -260,11 +260,8 @@ get_args <- function() {
   option_list <- list(
     make_option("--task", type = "character", dest = "task", default = "analysis",
                 help = "Task to run: analysis or candidates [default: %default]"),
-    
     make_option("--annotated-tsv", type = "character", dest = "annotated_tsv",
                 help = "Annotated DE table with Danio rerio mappings"),
-    make_option("--deseq-tsv", type = "character", dest = "deseq_tsv",
-                help = "DESeq2 all-genes TSV for candidate table"),
     make_option("--normalized-counts-tsv", type = "character", dest = "normalized_counts_tsv",
                 help = "DESeq2 normalized_counts.tsv"),
     make_option("--metadata-tsv", type = "character", dest = "metadata_tsv",
@@ -275,13 +272,14 @@ get_args <- function() {
                 help = "Sample column in metadata [default: %default]"),
     make_option("--group-col", type = "character", dest = "group_col", default = "Condition",
                 help = "Grouping column in metadata [default: %default]"),
-    
     make_option("--outdir", type = "character", dest = "outdir",
                 help = "Output directory"),
     make_option("--alpha", type = "double", dest = "alpha", default = 0.05,
                 help = "Adjusted p-value cutoff [default: %default]"),
     make_option("--target-geneid-col", type = "character", dest = "target_geneid_col", default = "target_Gene_ID",
                 help = "Column containing zebrafish Gene IDs [default: %default]"),
+    make_option("--source-geneid-col", type = "character", dest = "source_geneid_col", default = "Geneid",
+                help = "Source organism gene ID column [default: %default]"),
     make_option("--logfc-col", type = "character", dest = "logfc_col", default = "log2FoldChange",
                 help = "Column containing ranking statistic / log2FC [default: %default]"),
     make_option("--padj-col", type = "character", dest = "padj_col", default = "padj",
@@ -294,7 +292,7 @@ get_args <- function() {
   if (args$task == "analysis") {
     required <- c("annotated_tsv", "outdir")
   } else if (args$task == "candidates") {
-    required <- c("deseq_tsv", "normalized_counts_tsv", "metadata_tsv", "gsea_go_tsv", "outdir")
+    required <- c("annotated_tsv", "normalized_counts_tsv", "metadata_tsv", "gsea_go_tsv", "outdir")
   } else {
     print_help(parser)
     stop("Unsupported --task value: ", args$task)
@@ -457,14 +455,16 @@ main <- function() {
     run_enrichment_main(args)
   } else if (args$task == "candidates") {
     make_candidate_gene_table(
-      deseq_tsv = args$deseq_tsv,
+      annotated_tsv = args$annotated_tsv,
       normalized_counts_tsv = args$normalized_counts_tsv,
       metadata_tsv = args$metadata_tsv,
       gsea_go_tsv = args$gsea_go_tsv,
       outdir = args$outdir,
       sample_col = args$sample_col,
       group_col = args$group_col,
-      alpha = args$alpha
+      alpha = args$alpha,
+      source_geneid_col = args$source_geneid_col,
+      target_geneid_col = args$target_geneid_col
     )
   }
 }
