@@ -20,6 +20,12 @@ THREADS="8"
 EVALUE="1e-5"
 MAX_TARGET_SEQS="1"
 
+NORMALIZED_COUNTS_TSV=""
+METADATA_TSV=""
+GSEA_GO_TSV=""
+SAMPLE_COL="sample"
+GROUP_COL="Condition"
+
 MODE="all"
 
 usage() {
@@ -37,7 +43,7 @@ Required:
     --outdir DIR
     --source-metadata-tsv PATH
     --source-protein-faa PATH
-    --mode STR                all|prepare|diamond|merge|analysis [default: all]
+    --mode STR                all|prepare|diamond|merge|analysis|candidates [default: all]
 
 	Additionally required for modes other than prepare:
 	  --target-metadata-tsv PATH
@@ -79,6 +85,11 @@ while [[ $# -gt 0 ]]; do
     --evalue) EVALUE="$2"; shift 2 ;;
     --max-target-seqs) MAX_TARGET_SEQS="$2"; shift 2 ;;
     --mode) MODE="$2"; shift 2 ;;
+    --normalized-counts-tsv) NORMALIZED_COUNTS_TSV="$2"; shift 2 ;;
+    --metadata-tsv) METADATA_TSV="$2"; shift 2 ;;
+    --gsea-go-tsv) GSEA_GO_TSV="$2"; shift 2 ;;
+    --sample-col) SAMPLE_COL="$2"; shift 2 ;;
+    --group-col) GROUP_COL="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "ERROR: Unknown argument: $1" >&2; usage ;;
   esac
@@ -87,6 +98,11 @@ done
 if [[ "${MODE}" == "prepare" ]]; then
   for f in "$DESEQ_TSV" "$SOURCE_METADATA_TSV" "$SOURCE_PROTEIN_FAA"; do
     [[ -n "$f" ]] || { echo "ERROR: missing required file argument for prepare mode" >&2; exit 2; }
+    [[ -f "$f" ]] || { echo "ERROR: file not found: $f" >&2; exit 2; }
+  done
+elif [[ "${MODE}" == "candidates" ]]; then
+  for f in "$DESEQ_TSV" "$NORMALIZED_COUNTS_TSV" "$METADATA_TSV" "$GSEA_GO_TSV"; do
+    [[ -n "$f" ]] || { echo "ERROR: missing required file argument for candidates mode" >&2; exit 2; }
     [[ -f "$f" ]] || { echo "ERROR: file not found: $f" >&2; exit 2; }
   done
 else
@@ -197,6 +213,8 @@ PREP_DIR="${OUTDIR}/01_prepare"
 DIAMOND_DIR="${OUTDIR}/02_diamond"
 ENRICH_DIR="${OUTDIR}/03_enrichment"
 mkdir -p "${PREP_DIR}" "${DIAMOND_DIR}" "${ENRICH_DIR}"
+CANDIDATE_DIR="${OUTDIR}/04_candidates"
+mkdir -p "${CANDIDATE_DIR}"
 
 echo ">>> Enrichment mode: ${MODE}"
 
@@ -264,9 +282,28 @@ fi
 if [[ "${MODE}" == "all" || "${MODE}" == "analysis" ]]; then
   echo ">>> Step 4: run ORA + GSEA"
   conda run -n "${ENV_NAME}" Rscript workflow/run_enrichment_analysis.R \
+    --task analysis \
     --annotated-tsv "${DIAMOND_DIR}/deseq_annotated_with_danio_hits.tsv" \
     --outdir "${ENRICH_DIR}" \
     --alpha "${ALPHA}"
+fi
+
+if [[ "${MODE}" == "candidates" ]]; then
+  echo ">>> Step 5: build candidate gene table"
+  conda run -n "${ENV_NAME}" Rscript workflow/run_enrichment_analysis.R \
+    --task candidates \
+    --deseq-tsv "${DESEQ_TSV}" \
+    --normalized-counts-tsv "${NORMALIZED_COUNTS_TSV}" \
+    --metadata-tsv "${METADATA_TSV}" \
+    --gsea-go-tsv "${GSEA_GO_TSV}" \
+    --outdir "${CANDIDATE_DIR}" \
+    --sample-col "${SAMPLE_COL}" \
+    --group-col "${GROUP_COL}" \
+    --alpha "${ALPHA}"
+
+  echo ">>> Done."
+  echo ">>> Candidate outputs: ${CANDIDATE_DIR}"
+  exit 0
 fi
 
 echo ">>> Done."
