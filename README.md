@@ -61,6 +61,9 @@ It provides a structured, re-entrant framework for:
   24) Orthology mapping via DIAMOND against Danio rerio
   25) Automated gene ID harmonization for non-model organisms
   26) Pathway-level biological interpretation of transcriptomic results  
+  27) Candidate gene prioritization table integrating DESeq2 effect size,
+    normalized expression, and GSEA leading-edge support
+  28) Separate candidate-gene mode for downstream heatmap/qPCR target selection
   
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
@@ -133,6 +136,11 @@ STRUCTURE
    FigMappingQCandVar/          - STAR mapping QC tables + plots
   deseq2/
   enrichment/
+     <contrast>/
+       01_prepare/
+       02_diamond/
+       03_enrichment/
+       04_candidates/
     
 
  README.md
@@ -594,18 +602,21 @@ Outputs:
 
   03_enrichment/
 
-      ORA_GO_BP.tsv
-      ORA_GO_MF.tsv
-      ORA_GO_CC.tsv
-      ORA_KEGG.tsv
+      ora_go_bp_up.tsv
+      ora_go_bp_down.tsv
+      ora_kegg_up.tsv
+      ora_kegg_down.tsv
+      gsea_go_bp.tsv
+      gsea_kegg.tsv
+      gsea_ranked_gene_list.tsv
+      enrichment_summary.tsv
 
-      GSEA_GO_BP.tsv
-      GSEA_GO_MF.tsv
-      GSEA_GO_CC.tsv
-      GSEA_KEGG.tsv
-
-      ORA_dotplot.pdf
-      GSEA_dotplot.pdf
+      ora_go_bp_up_dotplot.png
+      ora_go_bp_down_dotplot.png
+      ora_kegg_up_dotplot.png
+      ora_kegg_down_dotplot.png
+      gsea_go_bp_dotplot.png
+      gsea_kegg_dotplot.png
 
 Interpretation:
 
@@ -614,6 +625,77 @@ Interpretation:
   GSEA identifies pathways with consistent directional expression shifts.
 
 Together, these approaches provide complementary biological insight.
+
+Stage 14 — Candidate Gene Prioritization
+
+This optional downstream stage builds a compact candidate-gene table
+for interpretation, heatmap design, and qPCR target selection.
+
+It integrates:
+
+  • DESeq2 effect size
+      - log2FoldChange
+      - abs_log2FoldChange
+      - padj
+      - baseMean
+
+  • Gene expression level
+      - mean normalized expression across all samples
+      - mean normalized expression in each comparison group
+
+  • Functional support from GSEA
+      - number of significant GO Biological Process terms in which a gene
+        appears in the GSEA leading edge (core_enrichment)
+
+This stage is designed to identify genes that are:
+
+  • strongly differentially expressed
+  • sufficiently expressed for robust interpretation
+  • repeatedly implicated in enriched biological programs
+
+Inputs:
+
+  results/deseq2/<contrast>/<contrast>_all_genes.tsv
+  results/deseq2/<contrast>/normalized_counts.tsv
+  results/deseq2/<contrast>/metadata_used.tsv
+  results/enrichment/<contrast>/03_enrichment/gsea_go_bp.tsv
+
+Outputs:
+
+  results/enrichment/<contrast>/04_candidates/
+      candidate_gene_table.tsv
+      candidate_gene_table_summary.tsv
+
+Main columns in candidate_gene_table.tsv:
+
+  • Geneid
+  • GeneName
+  • log2FoldChange
+  • abs_log2FoldChange
+  • padj
+  • baseMean
+  • mean_norm_all
+  • mean_norm_<group1>
+  • mean_norm_<group2>
+  • gsea_go_core_term_count
+  • candidate_score
+
+Ranking strategy:
+
+  Genes are prioritized using:
+    1) number of GSEA leading-edge GO terms
+    2) absolute fold change
+    3) adjusted p-value
+    4) expression level
+
+Interpretation:
+
+  Genes with high fold change, robust normalized expression,
+  and repeated GSEA leading-edge support are strong candidates
+  for:
+    • heatmap visualization
+    • concise biological storytelling
+    • qPCR validation
 </pre>
 
 ---
@@ -716,8 +798,40 @@ DESeq2:
   --enrich-target-metadata-tsv PATH
       ncbi_dataset.tsv for Danio rerio
 
+  Functional enrichment:
+  --enrich
+  --enrich-mode STR
+      all|prepare|diamond|merge|analysis|candidates
+
+  --enrich-deseq-tsv PATH
+      DESeq2 results table
+
+  --enrich-source-metadata-tsv PATH
+      ncbi_dataset.tsv for tambaqui
+
+  --enrich-source-protein-faa PATH
+      protein sequences for tambaqui
+
+  --enrich-target-metadata-tsv PATH
+      ncbi_dataset.tsv for Danio rerio
+
   --enrich-target-protein-faa PATH
       zebrafish proteome FASTA
+
+  --enrich-normalized-counts-tsv PATH
+      DESeq2 normalized_counts.tsv for candidate mode
+
+  --enrich-metadata-tsv PATH
+      DESeq2 metadata_used.tsv for candidate mode
+
+  --enrich-gsea-go-tsv PATH
+      GSEA GO BP table for candidate mode
+
+  --enrich-sample-col STR
+      sample column in metadata [default: sample]
+
+  --enrich-group-col STR
+      grouping column in metadata [default: Condition]
 
   --enrich-outdir PATH
       output directory
@@ -878,6 +992,28 @@ bash workflow/runall.sh \
   --enrich-source-protein-faa reference/protein.faa \
   --enrich-target-metadata-tsv reference/danio_rerio_ncbi_dataset.tsv \
   --enrich-target-protein-faa reference/danio_rerio_protein.faa \
+  --enrich-outdir results/enrichment/T2_vs_T1
+
+# 18) Build candidate gene table only
+# (requires previous DESeq2 output + GSEA GO BP output)
+
+bash workflow/runall.sh \
+  --no-qc \
+  --enrich \
+  --enrich-mode candidates \
+  --enrich-deseq-tsv results/deseq2/T2_vs_T1/Condition_T2_vs_T1_all_genes.tsv \
+  --enrich-normalized-counts-tsv results/deseq2/T2_vs_T1/normalized_counts.tsv \
+  --enrich-metadata-tsv results/deseq2/T2_vs_T1/metadata_used.tsv \
+  --enrich-gsea-go-tsv results/enrichment/T2_vs_T1/03_enrichment/gsea_go_bp.tsv \
+  --enrich-outdir results/enrichment/T2_vs_T1
+
+# 19) Build candidate gene table using default inferred paths
+
+bash workflow/runall.sh \
+  --no-qc \
+  --enrich \
+  --enrich-mode candidates \
+  --deseq2-outdir results/deseq2/T2_vs_T1 \
   --enrich-outdir results/enrichment/T2_vs_T1
 </pre>
 
