@@ -196,8 +196,9 @@ make_candidate_gene_table <- function(
         (1 + log2(gsea_go_core_term_count + 1))
     )
   
+  colnames(candidate_df)[colnames(candidate_df) == source_geneid_col] <- "Geneid"
+  
   candidate_df <- candidate_df |>
-    dplyr::rename(Geneid = !!source_geneid_col) |>
     dplyr::select(
       Geneid,
       GeneName,
