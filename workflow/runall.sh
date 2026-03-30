@@ -473,6 +473,11 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "ENRICH_EVALUE: ${ENRICH_EVALUE}"
   echo "ENRICH_MAX_TARGET_SEQS: ${ENRICH_MAX_TARGET_SEQS}"
   echo "ENRICH_MODE: ${ENRICH_MODE}"
+  echo "ENRICH_NORMALIZED_COUNTS_TSV: ${ENRICH_NORMALIZED_COUNTS_TSV}"
+  echo "ENRICH_METADATA_TSV: ${ENRICH_METADATA_TSV}"
+  echo "ENRICH_GSEA_GO_TSV: ${ENRICH_GSEA_GO_TSV}"
+  echo "ENRICH_SAMPLE_COL: ${ENRICH_SAMPLE_COL}"
+  echo "ENRICH_GROUP_COL: ${ENRICH_GROUP_COL}"
   echo "=========================================="
 } > "$INVOCATION_LOG"
 
@@ -643,6 +648,11 @@ if [[ "${RUN_ENRICH}" -eq 1 ]]; then
   )
 
   [[ -n "${ENRICH_TARGET_DMND}" ]] && ENRICH_ARGS+=( --target-dmnd "${ENRICH_TARGET_DMND}" )
+  [[ -n "${ENRICH_NORMALIZED_COUNTS_TSV}" ]] && ENRICH_ARGS+=( --normalized-counts-tsv "${ENRICH_NORMALIZED_COUNTS_TSV}" )
+  [[ -n "${ENRICH_METADATA_TSV}" ]] && ENRICH_ARGS+=( --metadata-tsv "${ENRICH_METADATA_TSV}" )
+  [[ -n "${ENRICH_GSEA_GO_TSV}" ]] && ENRICH_ARGS+=( --gsea-go-tsv "${ENRICH_GSEA_GO_TSV}" )
+  [[ -n "${ENRICH_SAMPLE_COL}" ]] && ENRICH_ARGS+=( --sample-col "${ENRICH_SAMPLE_COL}" )
+  [[ -n "${ENRICH_GROUP_COL}" ]] && ENRICH_ARGS+=( --group-col "${ENRICH_GROUP_COL}" )
 
   echo ">>> Running enrichment stage"
   bash workflow/run_enrichment.sh "${ENRICH_ARGS[@]}" \
