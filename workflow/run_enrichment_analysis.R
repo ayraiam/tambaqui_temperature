@@ -41,54 +41,58 @@ split_core_enrichment <- function(x) {
   trimws(unlist(strsplit(x, "/", fixed = TRUE)))
 }
 
-count_gsea_core_terms <- function(gsea_df, alpha = 0.05) {
+count_gsea_core_terms <- function(gsea_df, alpha = 0.05, target_geneid_col = "target_Gene_ID") {
   gsea_sig <- gsea_df |>
-    filter(!is.na(p.adjust), p.adjust <= alpha) |>
-    filter(!is.na(core_enrichment), core_enrichment != "")
+    dplyr::filter(!is.na(p.adjust), p.adjust <= alpha) |>
+    dplyr::filter(!is.na(core_enrichment), core_enrichment != "")
   
   if (nrow(gsea_sig) == 0) {
-    return(tibble(
-      Geneid = character(),
-      gsea_go_core_term_count = integer()
-    ))
+    out <- tibble::tibble(tmp_id = character(), gsea_go_core_term_count = integer())
+    colnames(out)[1] <- target_geneid_col
+    return(out)
   }
   
   core_long <- gsea_sig |>
-    rowwise() |>
-    mutate(Geneid = list(split_core_enrichment(core_enrichment))) |>
-    tidyr::unnest(cols = c(Geneid)) |>
-    ungroup() |>
-    filter(!is.na(Geneid), Geneid != "")
+    dplyr::rowwise() |>
+    dplyr::mutate(tmp_id = list(split_core_enrichment(core_enrichment))) |>
+    tidyr::unnest(cols = c(tmp_id)) |>
+    dplyr::ungroup() |>
+    dplyr::filter(!is.na(tmp_id), tmp_id != "")
   
-  core_long |>
-    count(Geneid, name = "gsea_go_core_term_count") |>
-    arrange(desc(gsea_go_core_term_count), Geneid)
+  out <- core_long |>
+    dplyr::count(tmp_id, name = "gsea_go_core_term_count") |>
+    dplyr::arrange(dplyr::desc(gsea_go_core_term_count), tmp_id)
+  
+  colnames(out)[1] <- target_geneid_col
+  out
 }
 
 make_candidate_gene_table <- function(
-    deseq_tsv,
+    annotated_tsv,
     normalized_counts_tsv,
     metadata_tsv,
     gsea_go_tsv,
     outdir,
     sample_col = "sample",
     group_col = "Condition",
-    alpha = 0.05
+    alpha = 0.05,
+    source_geneid_col = "Geneid",
+    target_geneid_col = "target_Gene_ID"
 ) {
   message2(">>> Building candidate gene table")
   
-  deseq_df <- read.delim(deseq_tsv, check.names = FALSE)
+  annotated_df <- read.delim(annotated_tsv, check.names = FALSE)
   norm_mat <- read.delim(normalized_counts_tsv, check.names = FALSE, row.names = 1)
   meta_df <- read.delim(metadata_tsv, check.names = FALSE)
   gsea_df <- read.delim(gsea_go_tsv, check.names = FALSE)
   
   norm_mat <- as.matrix(norm_mat)
   
-  required_deseq <- c("Geneid", "log2FoldChange", "padj", "baseMean")
-  missing_deseq <- setdiff(required_deseq, colnames(deseq_df))
-  if (length(missing_deseq) > 0) {
-    stop("DESeq table is missing required columns: ",
-         paste(missing_deseq, collapse = ", "))
+  required_annotated <- c(source_geneid_col, target_geneid_col, "log2FoldChange", "padj", "baseMean")
+  missing_annotated <- setdiff(required_annotated, colnames(annotated_df))
+  if (length(missing_annotated) > 0) {
+    stop("Annotated table is missing required columns: ",
+         paste(missing_annotated, collapse = ", "))
   }
   
   if (!(sample_col %in% colnames(meta_df))) {
@@ -103,8 +107,8 @@ make_candidate_gene_table <- function(
     stop("GSEA GO table is missing core_enrichment column")
   }
   
-  if (!("GeneName" %in% colnames(deseq_df))) {
-    deseq_df$GeneName <- NA_character_
+  if (!("GeneName" %in% colnames(annotated_df))) {
+    annotated_df$GeneName <- NA_character_
   }
   
   meta_df[[sample_col]] <- as.character(meta_df[[sample_col]])
@@ -118,7 +122,7 @@ make_candidate_gene_table <- function(
   }
   
   meta_df <- meta_df |>
-    filter(.data[[sample_col]] %in% common_samples)
+    dplyr::filter(.data[[sample_col]] %in% common_samples)
   
   norm_mat <- norm_mat[, common_samples, drop = FALSE]
   
@@ -132,47 +136,68 @@ make_candidate_gene_table <- function(
   group2 <- groups[2]
   
   group1_samples <- meta_df |>
-    filter(.data[[group_col]] == group1) |>
-    pull(.data[[sample_col]])
+    dplyr::filter(.data[[group_col]] == group1) |>
+    dplyr::pull(.data[[sample_col]])
   
   group2_samples <- meta_df |>
-    filter(.data[[group_col]] == group2) |>
-    pull(.data[[sample_col]])
+    dplyr::filter(.data[[group_col]] == group2) |>
+    dplyr::pull(.data[[sample_col]])
   
-  mean_norm_all_df <- tibble(
-    Geneid = rownames(norm_mat),
+  mean_norm_all_df <- tibble::tibble(
+    join_source_geneid = rownames(norm_mat),
     mean_norm_all = rowMeans(norm_mat, na.rm = TRUE)
   )
   
-  mean_norm_g1_df <- tibble(
-    Geneid = rownames(norm_mat),
+  mean_norm_g1_df <- tibble::tibble(
+    join_source_geneid = rownames(norm_mat),
     value = rowMeans(norm_mat[, group1_samples, drop = FALSE], na.rm = TRUE)
   )
   colnames(mean_norm_g1_df)[2] <- paste0("mean_norm_", group1)
   
-  mean_norm_g2_df <- tibble(
-    Geneid = rownames(norm_mat),
+  mean_norm_g2_df <- tibble::tibble(
+    join_source_geneid = rownames(norm_mat),
     value = rowMeans(norm_mat[, group2_samples, drop = FALSE], na.rm = TRUE)
   )
   colnames(mean_norm_g2_df)[2] <- paste0("mean_norm_", group2)
   
-  gsea_counts_df <- count_gsea_core_terms(gsea_df, alpha = alpha)
+  gsea_counts_df <- count_gsea_core_terms(
+    gsea_df,
+    alpha = alpha,
+    target_geneid_col = target_geneid_col
+  )
   
-  candidate_df <- deseq_df |>
+  annotated_df[[source_geneid_col]] <- as.character(annotated_df[[source_geneid_col]])
+  annotated_df[[target_geneid_col]] <- as.character(annotated_df[[target_geneid_col]])
+  
+  candidate_df <- annotated_df |>
     dplyr::mutate(
-      Geneid = as.character(Geneid),
       abs_log2FoldChange = abs(log2FoldChange)
     ) |>
-    dplyr::left_join(mean_norm_all_df, by = "Geneid") |>
-    dplyr::left_join(mean_norm_g1_df, by = "Geneid") |>
-    dplyr::left_join(mean_norm_g2_df, by = "Geneid") |>
-    dplyr::left_join(gsea_counts_df, by = "Geneid") |>
+    dplyr::left_join(
+      mean_norm_all_df,
+      by = stats::setNames("join_source_geneid", source_geneid_col)
+    ) |>
+    dplyr::left_join(
+      mean_norm_g1_df,
+      by = stats::setNames("join_source_geneid", source_geneid_col)
+    ) |>
+    dplyr::left_join(
+      mean_norm_g2_df,
+      by = stats::setNames("join_source_geneid", source_geneid_col)
+    ) |>
+    dplyr::left_join(
+      gsea_counts_df,
+      by = target_geneid_col
+    ) |>
     dplyr::mutate(
       gsea_go_core_term_count = ifelse(is.na(gsea_go_core_term_count), 0L, gsea_go_core_term_count),
       candidate_score = abs_log2FoldChange *
         log10(mean_norm_all + 1) *
         (1 + log2(gsea_go_core_term_count + 1))
-    ) |>
+    )
+  
+  candidate_df <- candidate_df |>
+    dplyr::rename(Geneid = !!source_geneid_col) |>
     dplyr::select(
       Geneid,
       GeneName,
@@ -201,7 +226,7 @@ make_candidate_gene_table <- function(
     quote = FALSE
   )
   
-  summary_df <- tibble(
+  summary_df <- tibble::tibble(
     metric = c(
       "n_rows_in_candidate_table",
       "n_genes_with_gsea_core_support",
