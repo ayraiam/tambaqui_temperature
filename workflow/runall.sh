@@ -110,6 +110,12 @@ ENRICH_EVALUE="1e-5"
 ENRICH_MAX_TARGET_SEQS="1"
 ENRICH_MODE="all"
 
+ENRICH_NORMALIZED_COUNTS_TSV=""
+ENRICH_METADATA_TSV=""
+ENRICH_GSEA_GO_TSV=""
+ENRICH_SAMPLE_COL="sample"
+ENRICH_GROUP_COL="Condition"
+
 usage() {
   cat <<EOF
 Usage: bash workflow/runall.sh [options]
@@ -213,6 +219,14 @@ Enrichment annotation + ORA/GSEA:
     --enrich-max-target-seqs INT      DIAMOND max target seqs [default: 1]
 
     --enrich-mode STR               all|prepare|diamond|merge|analysis [default: all]
+
+    --enrich-normalized-counts-tsv PATH  DESeq2 normalized_counts.tsv for candidate mode
+    --enrich-metadata-tsv PATH           DESeq2 metadata_used.tsv for candidate mode
+    --enrich-gsea-go-tsv PATH            GSEA GO BP TSV for candidate mode
+    --enrich-sample-col STR              sample column in metadata [default: sample]
+    --enrich-group-col STR               group column in metadata [default: Condition]
+
+    --enrich-mode STR               all|prepare|diamond|merge|analysis|candidates [default: all]
 Notes:
   You can also toggle via environment variables:
     FASTP_TRIM_POLYG=0|1
@@ -314,6 +328,11 @@ while [[ $# -gt 0 ]]; do
     --enrich-evalue) ENRICH_EVALUE="$2"; shift 2 ;;
     --enrich-max-target-seqs) ENRICH_MAX_TARGET_SEQS="$2"; shift 2 ;;
     --enrich-mode) ENRICH_MODE="$2"; shift 2 ;;
+    --enrich-normalized-counts-tsv) ENRICH_NORMALIZED_COUNTS_TSV="$2"; shift 2 ;;
+    --enrich-metadata-tsv) ENRICH_METADATA_TSV="$2"; shift 2 ;;
+    --enrich-gsea-go-tsv) ENRICH_GSEA_GO_TSV="$2"; shift 2 ;;
+    --enrich-sample-col) ENRICH_SAMPLE_COL="$2"; shift 2 ;;
+    --enrich-group-col) ENRICH_GROUP_COL="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1"; usage ;;
   esac
@@ -359,6 +378,18 @@ fi
 
 if [[ -z "${ENRICH_OUTDIR}" ]]; then
   ENRICH_OUTDIR="${RESULTS_ABS}/enrichment"
+fi
+
+if [[ -z "${ENRICH_NORMALIZED_COUNTS_TSV}" ]]; then
+  ENRICH_NORMALIZED_COUNTS_TSV="${DESEQ2_OUTDIR}/normalized_counts.tsv"
+fi
+
+if [[ -z "${ENRICH_METADATA_TSV}" ]]; then
+  ENRICH_METADATA_TSV="${DESEQ2_OUTDIR}/metadata_used.tsv"
+fi
+
+if [[ -z "${ENRICH_GSEA_GO_TSV}" ]]; then
+  ENRICH_GSEA_GO_TSV="${ENRICH_OUTDIR}/03_enrichment/gsea_go_bp.tsv"
 fi
 
 mkdir -p logs metadata
