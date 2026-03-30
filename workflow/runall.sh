@@ -218,8 +218,6 @@ Enrichment annotation + ORA/GSEA:
     --enrich-evalue FLOAT             DIAMOND evalue [default: 1e-5]
     --enrich-max-target-seqs INT      DIAMOND max target seqs [default: 1]
 
-    --enrich-mode STR               all|prepare|diamond|merge|analysis [default: all]
-
     --enrich-normalized-counts-tsv PATH  DESeq2 normalized_counts.tsv for candidate mode
     --enrich-metadata-tsv PATH           DESeq2 metadata_used.tsv for candidate mode
     --enrich-gsea-go-tsv PATH            GSEA GO BP TSV for candidate mode
