@@ -113,6 +113,7 @@ ENRICH_MODE="all"
 ENRICH_NORMALIZED_COUNTS_TSV=""
 ENRICH_METADATA_TSV=""
 ENRICH_GSEA_GO_TSV=""
+ENRICH_GSEA_KEGG_TSV=""
 ENRICH_SAMPLE_COL="sample"
 ENRICH_GROUP_COL="Condition"
 
@@ -221,6 +222,7 @@ Enrichment annotation + ORA/GSEA:
     --enrich-normalized-counts-tsv PATH  DESeq2 normalized_counts.tsv for candidate mode
     --enrich-metadata-tsv PATH           DESeq2 metadata_used.tsv for candidate mode
     --enrich-gsea-go-tsv PATH            GSEA GO BP TSV for candidate mode
+    --enrich-gsea-kegg-tsv PATH          GSEA KEGG TSV for candidate mode
     --enrich-sample-col STR              sample column in metadata [default: sample]
     --enrich-group-col STR               group column in metadata [default: Condition]
 
@@ -329,6 +331,7 @@ while [[ $# -gt 0 ]]; do
     --enrich-normalized-counts-tsv) ENRICH_NORMALIZED_COUNTS_TSV="$2"; shift 2 ;;
     --enrich-metadata-tsv) ENRICH_METADATA_TSV="$2"; shift 2 ;;
     --enrich-gsea-go-tsv) ENRICH_GSEA_GO_TSV="$2"; shift 2 ;;
+    --enrich-gsea-kegg-tsv) ENRICH_GSEA_KEGG_TSV="$2"; shift 2 ;;
     --enrich-sample-col) ENRICH_SAMPLE_COL="$2"; shift 2 ;;
     --enrich-group-col) ENRICH_GROUP_COL="$2"; shift 2 ;;
     -h|--help) usage ;;
@@ -390,6 +393,10 @@ fi
 
 if [[ -z "${ENRICH_GSEA_GO_TSV}" ]]; then
   ENRICH_GSEA_GO_TSV="${ENRICH_OUTDIR}/03_enrichment/gsea_go_bp.tsv"
+fi
+
+if [[ -z "${ENRICH_GSEA_KEGG_TSV}" ]]; then
+  ENRICH_GSEA_KEGG_TSV="${ENRICH_OUTDIR}/03_enrichment/gsea_kegg.tsv"
 fi
 
 mkdir -p logs metadata
@@ -476,6 +483,7 @@ INVOCATION_LOG="logs/invocation_${TS}.txt"
   echo "ENRICH_NORMALIZED_COUNTS_TSV: ${ENRICH_NORMALIZED_COUNTS_TSV}"
   echo "ENRICH_METADATA_TSV: ${ENRICH_METADATA_TSV}"
   echo "ENRICH_GSEA_GO_TSV: ${ENRICH_GSEA_GO_TSV}"
+  echo "ENRICH_GSEA_KEGG_TSV: ${ENRICH_GSEA_KEGG_TSV}"
   echo "ENRICH_SAMPLE_COL: ${ENRICH_SAMPLE_COL}"
   echo "ENRICH_GROUP_COL: ${ENRICH_GROUP_COL}"
   echo "=========================================="
@@ -651,6 +659,7 @@ if [[ "${RUN_ENRICH}" -eq 1 ]]; then
   [[ -n "${ENRICH_NORMALIZED_COUNTS_TSV}" ]] && ENRICH_ARGS+=( --normalized-counts-tsv "${ENRICH_NORMALIZED_COUNTS_TSV}" )
   [[ -n "${ENRICH_METADATA_TSV}" ]] && ENRICH_ARGS+=( --metadata-tsv "${ENRICH_METADATA_TSV}" )
   [[ -n "${ENRICH_GSEA_GO_TSV}" ]] && ENRICH_ARGS+=( --gsea-go-tsv "${ENRICH_GSEA_GO_TSV}" )
+  [[ -n "${ENRICH_GSEA_KEGG_TSV}" ]] && ENRICH_ARGS+=( --gsea-kegg-tsv "${ENRICH_GSEA_KEGG_TSV}" )
   [[ -n "${ENRICH_SAMPLE_COL}" ]] && ENRICH_ARGS+=( --sample-col "${ENRICH_SAMPLE_COL}" )
   [[ -n "${ENRICH_GROUP_COL}" ]] && ENRICH_ARGS+=( --group-col "${ENRICH_GROUP_COL}" )
 
