@@ -41,14 +41,19 @@ split_core_enrichment <- function(x) {
   trimws(unlist(strsplit(x, "/", fixed = TRUE)))
 }
 
-count_gsea_core_terms <- function(gsea_df, alpha = 0.05, target_geneid_col = "target_Gene_ID") {
+count_gsea_core_terms <- function(
+    gsea_df,
+    alpha = 0.05,
+    target_geneid_col = "target_Gene_ID",
+    count_col_name = "gsea_go_core_term_count"
+) {
   gsea_sig <- gsea_df |>
     dplyr::filter(!is.na(p.adjust), p.adjust <= alpha) |>
     dplyr::filter(!is.na(core_enrichment), core_enrichment != "")
   
   if (nrow(gsea_sig) == 0) {
-    out <- tibble::tibble(tmp_id = character(), gsea_go_core_term_count = integer())
-    colnames(out)[1] <- target_geneid_col
+    out <- tibble::tibble(tmp_id = character(), tmp_count = integer())
+    colnames(out) <- c(target_geneid_col, count_col_name)
     return(out)
   }
   
@@ -60,10 +65,10 @@ count_gsea_core_terms <- function(gsea_df, alpha = 0.05, target_geneid_col = "ta
     dplyr::filter(!is.na(tmp_id), tmp_id != "")
   
   out <- core_long |>
-    dplyr::count(tmp_id, name = "gsea_go_core_term_count") |>
-    dplyr::arrange(dplyr::desc(gsea_go_core_term_count), tmp_id)
+    dplyr::count(tmp_id, name = "tmp_count") |>
+    dplyr::arrange(dplyr::desc(tmp_count), tmp_id)
   
-  colnames(out)[1] <- target_geneid_col
+  colnames(out) <- c(target_geneid_col, count_col_name)
   out
 }
 
@@ -72,6 +77,7 @@ make_candidate_gene_table <- function(
     normalized_counts_tsv,
     metadata_tsv,
     gsea_go_tsv,
+    gsea_kegg_tsv,
     outdir,
     sample_col = "sample",
     group_col = "Condition",
@@ -84,7 +90,8 @@ make_candidate_gene_table <- function(
   annotated_df <- read.delim(annotated_tsv, check.names = FALSE)
   norm_mat <- read.delim(normalized_counts_tsv, check.names = FALSE, row.names = 1)
   meta_df <- read.delim(metadata_tsv, check.names = FALSE)
-  gsea_df <- read.delim(gsea_go_tsv, check.names = FALSE)
+  gsea_go_df <- read.delim(gsea_go_tsv, check.names = FALSE)
+  gsea_kegg_df <- read.delim(gsea_kegg_tsv, check.names = FALSE)
   
   norm_mat <- as.matrix(norm_mat)
   
@@ -103,8 +110,12 @@ make_candidate_gene_table <- function(
     stop("Metadata file is missing group column: ", group_col)
   }
   
-  if (!("core_enrichment" %in% colnames(gsea_df))) {
+  if (!("core_enrichment" %in% colnames(gsea_go_df))) {
     stop("GSEA GO table is missing core_enrichment column")
+  }
+  
+  if (!("core_enrichment" %in% colnames(gsea_kegg_df))) {
+    stop("GSEA KEGG table is missing core_enrichment column")
   }
   
   if (!("GeneName" %in% colnames(annotated_df))) {
@@ -160,10 +171,18 @@ make_candidate_gene_table <- function(
   )
   colnames(mean_norm_g2_df)[2] <- paste0("mean_norm_", group2)
   
-  gsea_counts_df <- count_gsea_core_terms(
-    gsea_df,
+  gsea_go_counts_df <- count_gsea_core_terms(
+    gsea_go_df,
     alpha = alpha,
-    target_geneid_col = target_geneid_col
+    target_geneid_col = target_geneid_col,
+    count_col_name = "gsea_go_core_term_count"
+  )
+  
+  gsea_kegg_counts_df <- count_gsea_core_terms(
+    gsea_kegg_df,
+    alpha = alpha,
+    target_geneid_col = target_geneid_col,
+    count_col_name = "gsea_kegg_core_term_count"
   )
   
   annotated_df[[source_geneid_col]] <- as.character(annotated_df[[source_geneid_col]])
@@ -186,14 +205,19 @@ make_candidate_gene_table <- function(
       by = stats::setNames("join_source_geneid", source_geneid_col)
     ) |>
     dplyr::left_join(
-      gsea_counts_df,
+      gsea_go_counts_df,
+      by = target_geneid_col
+    ) |>
+    dplyr::left_join(
+      gsea_kegg_counts_df,
       by = target_geneid_col
     ) |>
     dplyr::mutate(
       gsea_go_core_term_count = ifelse(is.na(gsea_go_core_term_count), 0L, gsea_go_core_term_count),
+      gsea_kegg_core_term_count = ifelse(is.na(gsea_kegg_core_term_count), 0L, gsea_kegg_core_term_count),
       candidate_score = abs_log2FoldChange *
         log10(mean_norm_all + 1) *
-        (1 + log2(gsea_go_core_term_count + 1))
+        (1 + log2(gsea_go_core_term_count + gsea_kegg_core_term_count + 1))
     )
   
   colnames(candidate_df)[colnames(candidate_df) == source_geneid_col] <- "Geneid"
@@ -209,10 +233,11 @@ make_candidate_gene_table <- function(
       mean_norm_all,
       dplyr::starts_with("mean_norm_"),
       gsea_go_core_term_count,
+      gsea_kegg_core_term_count,
       candidate_score
     ) |>
     dplyr::arrange(
-      dplyr::desc(gsea_go_core_term_count),
+      dplyr::desc(gsea_go_core_term_count + gsea_kegg_core_term_count),
       dplyr::desc(abs_log2FoldChange),
       padj,
       dplyr::desc(baseMean)
@@ -230,7 +255,9 @@ make_candidate_gene_table <- function(
   summary_df <- tibble::tibble(
     metric = c(
       "n_rows_in_candidate_table",
-      "n_genes_with_gsea_core_support",
+      "n_genes_with_gsea_go_core_support",
+      "n_genes_with_gsea_kegg_core_support",
+      "n_genes_with_any_gsea_core_support",
       "group1",
       "group2",
       "n_group1_samples",
@@ -239,6 +266,8 @@ make_candidate_gene_table <- function(
     value = c(
       nrow(candidate_df),
       sum(candidate_df$gsea_go_core_term_count > 0, na.rm = TRUE),
+      sum(candidate_df$gsea_kegg_core_term_count > 0, na.rm = TRUE),
+      sum((candidate_df$gsea_go_core_term_count + candidate_df$gsea_kegg_core_term_count) > 0, na.rm = TRUE),
       group1,
       group2,
       length(group1_samples),
@@ -269,6 +298,8 @@ get_args <- function() {
                 help = "DESeq2 metadata_used.tsv"),
     make_option("--gsea-go-tsv", type = "character", dest = "gsea_go_tsv",
                 help = "GSEA GO BP TSV"),
+    make_option("--gsea-kegg-tsv", type = "character", dest = "gsea_kegg_tsv",
+                help = "GSEA KEGG TSV"),
     make_option("--sample-col", type = "character", dest = "sample_col", default = "sample",
                 help = "Sample column in metadata [default: %default]"),
     make_option("--group-col", type = "character", dest = "group_col", default = "Condition",
@@ -293,7 +324,7 @@ get_args <- function() {
   if (args$task == "analysis") {
     required <- c("annotated_tsv", "outdir")
   } else if (args$task == "candidates") {
-    required <- c("annotated_tsv", "normalized_counts_tsv", "metadata_tsv", "gsea_go_tsv", "outdir")
+    required <- c("annotated_tsv", "normalized_counts_tsv", "metadata_tsv", "gsea_go_tsv", "gsea_kegg_tsv", "outdir")
   } else {
     print_help(parser)
     stop("Unsupported --task value: ", args$task)
@@ -460,6 +491,7 @@ main <- function() {
       normalized_counts_tsv = args$normalized_counts_tsv,
       metadata_tsv = args$metadata_tsv,
       gsea_go_tsv = args$gsea_go_tsv,
+      gsea_kegg_tsv = args$gsea_kegg_tsv,
       outdir = args$outdir,
       sample_col = args$sample_col,
       group_col = args$group_col,
