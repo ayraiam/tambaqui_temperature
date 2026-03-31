@@ -23,6 +23,7 @@ MAX_TARGET_SEQS="1"
 NORMALIZED_COUNTS_TSV=""
 METADATA_TSV=""
 GSEA_GO_TSV=""
+GSEA_KEGG_TSV=""
 SAMPLE_COL="sample"
 GROUP_COL="Condition"
 
@@ -88,6 +89,7 @@ while [[ $# -gt 0 ]]; do
     --normalized-counts-tsv) NORMALIZED_COUNTS_TSV="$2"; shift 2 ;;
     --metadata-tsv) METADATA_TSV="$2"; shift 2 ;;
     --gsea-go-tsv) GSEA_GO_TSV="$2"; shift 2 ;;
+    --gsea-kegg-tsv) GSEA_KEGG_TSV="$2"; shift 2 ;;
     --sample-col) SAMPLE_COL="$2"; shift 2 ;;
     --group-col) GROUP_COL="$2"; shift 2 ;;
     -h|--help) usage ;;
@@ -101,7 +103,7 @@ if [[ "${MODE}" == "prepare" ]]; then
     [[ -f "$f" ]] || { echo "ERROR: file not found: $f" >&2; exit 2; }
   done
 elif [[ "${MODE}" == "candidates" ]]; then
-  for f in "$NORMALIZED_COUNTS_TSV" "$METADATA_TSV" "$GSEA_GO_TSV"; do
+  for f in "$NORMALIZED_COUNTS_TSV" "$METADATA_TSV" "$GSEA_GO_TSV" "$GSEA_KEGG_TSV"; do
     [[ -n "$f" ]] || { echo "ERROR: missing required file argument for candidates mode" >&2; exit 2; }
     [[ -f "$f" ]] || { echo "ERROR: file not found: $f" >&2; exit 2; }
   done
@@ -304,6 +306,7 @@ if [[ "${MODE}" == "candidates" ]]; then
     --normalized-counts-tsv "${NORMALIZED_COUNTS_TSV}" \
     --metadata-tsv "${METADATA_TSV}" \
     --gsea-go-tsv "${GSEA_GO_TSV}" \
+    --gsea-kegg-tsv "${GSEA_KEGG_TSV}" \
     --outdir "${CANDIDATE_DIR}" \
     --sample-col "${SAMPLE_COL}" \
     --group-col "${GROUP_COL}" \
