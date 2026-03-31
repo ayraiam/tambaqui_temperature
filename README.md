@@ -62,8 +62,11 @@ It provides a structured, re-entrant framework for:
   25) Automated gene ID harmonization for non-model organisms
   26) Pathway-level biological interpretation of transcriptomic results  
   27) Candidate gene prioritization table integrating DESeq2 effect size,
-    normalized expression, and GSEA leading-edge support
+      normalized expression, and GSEA leading-edge support from both
+      GO Biological Process and KEGG
   28) Separate candidate-gene mode for downstream heatmap/qPCR target selection
+  29) Combined pathway-aware candidate scoring based on repeated
+      GSEA GO + KEGG core-enrichment support
   
 The pipeline auto-detects:
   • Paired-end reads (R1/R2, _1/_2 patterns)
@@ -135,12 +138,14 @@ STRUCTURE
    rseqc/
    FigMappingQCandVar/          - STAR mapping QC tables + plots
   deseq2/
-  enrichment/
+    enrichment/
      <contrast>/
        01_prepare/
        02_diamond/
        03_enrichment/
        04_candidates/
+           candidate_gene_table.tsv
+           candidate_gene_table_summary.tsv
     
 
  README.md
@@ -490,6 +495,8 @@ Key features:
   • Proper factor releveling for contrast specification
 
   • Wald test for differential expression
+  
+  • Optional apeglm shrinkage for more stable log2 fold-change estimates
 
   • Multiple testing correction:
       Benjamini–Hochberg (FDR)
@@ -548,7 +555,7 @@ Workflow:
   3) Retrieve ortholog gene identifiers
   4) Perform pathway enrichment analysis
 
-Two complementary approaches are used:
+Two complementary enrichment strategies are used:
 
 ORA (Over-representation analysis)
   Tests whether significant DE genes are enriched for biological pathways.
@@ -556,15 +563,14 @@ ORA (Over-representation analysis)
 GSEA (Gene set enrichment analysis)
   Uses the ranked gene list to detect coordinated pathway-level shifts.
 
-Enrichment databases:
+Enrichment databases currently used in the pipeline:
 
   • Gene Ontology (GO)
-      - Biological Process
-      - Molecular Function
-      - Cellular Component
+      - Biological Process (ORA + GSEA)
 
   • KEGG pathways
-
+      - ORA + GSEA
+    
 Methodological features:
 
   • Uses full DESeq2 results table (no log2FC filtering)
@@ -646,12 +652,15 @@ It integrates:
   • Functional support from GSEA
       - number of significant GO Biological Process terms in which a gene
         appears in the GSEA leading edge (core_enrichment)
+      - number of significant KEGG pathways in which a gene appears
+        in the GSEA leading edge (core_enrichment)
 
 This stage is designed to identify genes that are:
 
   • strongly differentially expressed
   • sufficiently expressed for robust interpretation
   • repeatedly implicated in enriched biological programs
+  • supported across complementary pathway annotation systems
 
 Inputs:
 
@@ -659,6 +668,7 @@ Inputs:
   results/deseq2/<contrast>/normalized_counts.tsv
   results/deseq2/<contrast>/metadata_used.tsv
   results/enrichment/<contrast>/03_enrichment/gsea_go_bp.tsv
+  results/enrichment/<contrast>/03_enrichment/gsea_kegg.tsv
 
 Outputs:
 
@@ -678,12 +688,37 @@ Main columns in candidate_gene_table.tsv:
   • mean_norm_<group1>
   • mean_norm_<group2>
   • gsea_go_core_term_count
+  • gsea_kegg_core_term_count
   • candidate_score
+
+Meaning of the GSEA support columns:
+
+  • gsea_go_core_term_count
+      Number of significant GO BP GSEA terms in which the gene appears
+      in the leading edge
+
+  • gsea_kegg_core_term_count
+      Number of significant KEGG GSEA pathways in which the gene appears
+      in the leading edge
+
+Candidate score:
+
+  candidate_score = abs_log2FoldChange *
+                    log10(mean_norm_all + 1) *
+                    (1 + log2(gsea_go_core_term_count +
+                              gsea_kegg_core_term_count + 1))
+
+Interpretation of candidate_score:
+
+  Genes receive higher scores when they show:
+    • larger expression changes
+    • stronger overall expression
+    • repeated support across enriched GO and/or KEGG leading-edge sets
 
 Ranking strategy:
 
   Genes are prioritized using:
-    1) number of GSEA leading-edge GO terms
+    1) total GSEA core support (GO + KEGG)
     2) absolute fold change
     3) adjusted p-value
     4) expression level
@@ -691,11 +726,18 @@ Ranking strategy:
 Interpretation:
 
   Genes with high fold change, robust normalized expression,
-  and repeated GSEA leading-edge support are strong candidates
-  for:
+  and repeated GSEA leading-edge support across GO and KEGG
+  are strong candidates for:
     • heatmap visualization
     • concise biological storytelling
     • qPCR validation
+
+Important note:
+
+  GSEA leading-edge support is counted using the mapped zebrafish
+  gene identifier column (default: target_Gene_ID). Therefore,
+  candidate-mode joins assume that the GSEA core_enrichment field
+  and the mapped ortholog ID column use the same identifier system.
 </pre>
 
 ---
@@ -781,24 +823,7 @@ DESeq2:
   --deseq2-min-count INT
   --deseq2-min-samples INT  
 
- Functional enrichment:
-  --enrich
-  --enrich-mode STR
-      all|prepare|diamond|merge|analysis
-
-  --enrich-deseq-tsv PATH
-      DESeq2 results table
-
-  --enrich-source-metadata-tsv PATH
-      ncbi_dataset.tsv for tambaqui
-
-  --enrich-source-protein-faa PATH
-      protein sequences for tambaqui
-
-  --enrich-target-metadata-tsv PATH
-      ncbi_dataset.tsv for Danio rerio
-
-  Functional enrichment:
+Functional enrichment:
   --enrich
   --enrich-mode STR
       all|prepare|diamond|merge|analysis|candidates
@@ -818,6 +843,9 @@ DESeq2:
   --enrich-target-protein-faa PATH
       zebrafish proteome FASTA
 
+  --enrich-target-dmnd PATH
+      optional prebuilt DIAMOND database
+
   --enrich-normalized-counts-tsv PATH
       DESeq2 normalized_counts.tsv for candidate mode
 
@@ -826,6 +854,9 @@ DESeq2:
 
   --enrich-gsea-go-tsv PATH
       GSEA GO BP table for candidate mode
+
+  --enrich-gsea-kegg-tsv PATH
+      GSEA KEGG table for candidate mode
 
   --enrich-sample-col STR
       sample column in metadata [default: sample]
@@ -995,7 +1026,7 @@ bash workflow/runall.sh \
   --enrich-outdir results/enrichment/T2_vs_T1
 
 # 18) Build candidate gene table only
-# (requires previous DESeq2 output + GSEA GO BP output)
+# (requires previous DESeq2 output + GSEA GO BP + GSEA KEGG outputs)
 
 bash workflow/runall.sh \
   --no-qc \
@@ -1005,6 +1036,7 @@ bash workflow/runall.sh \
   --enrich-normalized-counts-tsv results/deseq2/T2_vs_T1/normalized_counts.tsv \
   --enrich-metadata-tsv results/deseq2/T2_vs_T1/metadata_used.tsv \
   --enrich-gsea-go-tsv results/enrichment/T2_vs_T1/03_enrichment/gsea_go_bp.tsv \
+  --enrich-gsea-kegg-tsv results/enrichment/T2_vs_T1/03_enrichment/gsea_kegg.tsv \
   --enrich-outdir results/enrichment/T2_vs_T1
 
 # 19) Build candidate gene table using default inferred paths
