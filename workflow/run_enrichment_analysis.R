@@ -215,9 +215,12 @@ make_candidate_gene_table <- function(
     dplyr::mutate(
       gsea_go_core_term_count = ifelse(is.na(gsea_go_core_term_count), 0L, gsea_go_core_term_count),
       gsea_kegg_core_term_count = ifelse(is.na(gsea_kegg_core_term_count), 0L, gsea_kegg_core_term_count),
-      candidate_score = abs_log2FoldChange *
-        log10(mean_norm_all + 1) *
-        (1 + log2(gsea_go_core_term_count + gsea_kegg_core_term_count + 1))
+      
+      candidate_score =
+        abs_log2FoldChange *
+        -log10(padj + 1e-300) *
+        log10(baseMean + 1) *
+        (1 + log2(gsea_go_core_term_count + gsea_kegg_core_term_count + 1))^2
     )
   
   colnames(candidate_df)[colnames(candidate_df) == source_geneid_col] <- "Geneid"
@@ -237,10 +240,8 @@ make_candidate_gene_table <- function(
       candidate_score
     ) |>
     dplyr::arrange(
-      dplyr::desc(gsea_go_core_term_count + gsea_kegg_core_term_count),
-      dplyr::desc(abs_log2FoldChange),
-      padj,
-      dplyr::desc(baseMean)
+      dplyr::desc(candidate_score),
+      padj
     )
   
   out_tsv <- file.path(outdir, "candidate_gene_table.tsv")
